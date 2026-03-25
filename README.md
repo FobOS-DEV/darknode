@@ -1,5 +1,8 @@
 # VPN Telegram Bot MVP
 
+[![CI](https://github.com/FobOS-DEV/darknode/actions/workflows/ci.yml/badge.svg)](https://github.com/FobOS-DEV/darknode/actions/workflows/ci.yml)
+[![Docker Publish](https://github.com/FobOS-DEV/darknode/actions/workflows/publish-ghcr.yml/badge.svg)](https://github.com/FobOS-DEV/darknode/actions/workflows/publish-ghcr.yml)
+
 Telegram-бот для выдачи персонального VPN/VLESS-конфига, показа статуса доступа и базового управления клиентами через админ-команды.
 
 ## Возможности
@@ -89,6 +92,17 @@ docker compose down
 ```
 
 Важно: не запускайте одновременно несколько экземпляров бота с одним и тем же `BOT_TOKEN`.
+
+## GHCR
+
+Docker image будет публиковаться в GitHub Container Registry на теги релизов.
+
+Ожидаемый адрес образа:
+
+```bash
+ghcr.io/fobos-dev/darknode:latest
+ghcr.io/fobos-dev/darknode:v0.1.0
+```
 
 ## Тестовые данные
 
