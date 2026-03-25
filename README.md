@@ -2,6 +2,16 @@
 
 Telegram-бот для выдачи персонального VPN/VLESS-конфига, показа статуса доступа и базового управления клиентами через админ-команды.
 
+## Возможности
+
+- пользовательские команды: `/start`, `/config`, `/status`, `/help`, `/contact`
+- главное меню с inline-кнопками
+- выдача персонального VLESS-конфига только владельцу Telegram ID
+- статусы доступа: `ACTIVE`, `EXPIRED`, `DISABLED`
+- админские сценарии через команды и inline-меню
+- SQLite + Prisma
+- Docker Compose для запуска одним контейнером
+
 ## Стек
 
 - Node.js
@@ -9,59 +19,52 @@ Telegram-бот для выдачи персонального VPN/VLESS-кон�
 - grammY
 - Prisma
 - SQLite
-- dotenv
 - pino
 - Docker Compose
 
-## Возможности MVP
+## Переменные окружения
 
-- пользовательские команды: `/start`, `/config`, `/status`, `/help`, `/contact`
-- inline-кнопки главного меню
-- проверка доступа по `telegram_id`
-- статусы доступа: `ACTIVE`, `EXPIRED`, `DISABLED`
-- админ-команды: `/admin`, `/adduser`, `/setexpiry`, `/disable`, `/enable`, `/listusers`, `/userinfo`
-- аудит админ-действий в таблице `AuditLog`
-- Docker-запуск одним контейнером
-- тестовый seed для локальной проверки
+Создайте `.env` на основе `.env.example`.
 
-## Подготовка
+Основные переменные:
 
-1. Создайте `.env` на основе [.env.example](D:\PROJECTS\VPN\.env.example).
-2. Установите зависимости:
+- `BOT_TOKEN` — токен Telegram-бота
+- `ADMIN_TELEGRAM_ID` — Telegram ID администратора
+- `ADMIN_USERNAME` — username администратора
+- `DATABASE_URL` — SQLite URL, по умолчанию `file:./prisma/dev.db`
+- `HELP_LINK` — ссылка на подробную инструкцию
+- `SUPPORT_LINK` — ссылка на администратора в Telegram
+- `TZ` — таймзона
+
+## Локальный запуск
+
+Установка зависимостей:
 
 ```bash
 npm install
 ```
 
-3. Сгенерируйте Prisma client:
+Генерация Prisma client:
 
 ```bash
 npm run prisma:generate
 ```
 
-4. Если база ещё не создана, подготовьте SQLite-файл и схему.
-
-В проекте уже есть стартовая миграция в [prisma/migrations/20260325195000_init/migration.sql](D:\PROJECTS\VPN\prisma\migrations\20260325195000_init\migration.sql).
-
-Основные переменные окружения:
-
-- `BOT_TOKEN` - токен Telegram-бота
-- `ADMIN_TELEGRAM_ID` - Telegram ID администратора
-- `SUPPORT_LINK` - ссылка на администратора в Telegram
-- `HELP_LINK` - ссылка на подробную инструкцию, открывается кнопкой `Инструкция`
-
-## Локальный запуск
-
-Режим разработки:
+Запуск в dev-режиме:
 
 ```bash
 npm run dev
 ```
 
-Продакшн-сборка:
+Сборка:
 
 ```bash
 npm run build
+```
+
+Запуск собранной версии:
+
+```bash
 npm run start
 ```
 
@@ -85,15 +88,11 @@ docker compose logs -f bot
 docker compose down
 ```
 
-Важно:
-
-- запускайте только один экземпляр бота с одним `BOT_TOKEN`
-- база `./prisma/dev.db` монтируется в контейнер как `/app/prisma/dev.db`
-- перед переходом на Docker остановите локальный `npm run dev`
+Важно: не запускайте одновременно несколько экземпляров бота с одним и тем же `BOT_TOKEN`.
 
 ## Тестовые данные
 
-Для быстрого наполнения базы тестовыми пользователями:
+Быстрое наполнение базы:
 
 ```bash
 npm run seed:test
@@ -111,21 +110,29 @@ npm run seed:test
 - `/config`
 - `/admin`
 
-## Формат админ-команд
+## Админка
 
-`/adduser <telegram_id> <full_name> <display_name> <email_label> <uuid> <vless_url> <server> <port> <public_key> <short_id> <sni> <flow> [expires_at_iso]`
+Доступно:
 
-`/setexpiry <telegram_id> <YYYY-MM-DD|none>`
+- `/admin`
+- `/adduser`
+- `/setexpiry`
+- `/disable`
+- `/enable`
+- `/listusers`
+- `/userinfo`
+- `/cancel`
 
-`/disable <telegram_id>`
+Админское меню поддерживает inline-кнопки:
 
-`/enable <telegram_id>`
+- `Добавить`
+- `Срок`
+- `Отключить`
+- `Включить`
+- `Список`
+- `Карточка`
 
-`/userinfo <telegram_id>`
-
-Если в имени нужны пробелы, в текущем MVP используйте `_`.
-
-## Структура
+## Структура проекта
 
 ```text
 src/
@@ -147,4 +154,4 @@ prisma/
 
 - `vless_url` и связанные поля считаются чувствительными данными
 - доступ к админ-командам ограничен через `ADMIN_TELEGRAM_ID`
-- если нужен полностью управляемый production-сценарий, следующий шаг после MVP: нормальные миграции Prisma без ручного SQL, healthcheck и внешний process manager
+- для production следующим шагом логично добавить healthcheck, нормальный rollout миграций и process manager
