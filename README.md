@@ -13,7 +13,8 @@ Telegram-бот для выдачи персонального VPN/VLESS-кон�
 - статусы доступа: `ACTIVE`, `EXPIRED`, `DISABLED`
 - админские сценарии через команды и inline-меню
 - SQLite + Prisma
-- Docker Compose для запуска одним контейнером
+- Docker Compose для локального запуска
+- GHCR image для серверного деплоя
 
 ## Стек
 
@@ -73,7 +74,7 @@ npm run start
 
 ## Docker
 
-Сборка и запуск:
+Локальная сборка и запуск:
 
 ```bash
 docker compose up --build -d
@@ -95,13 +96,29 @@ docker compose down
 
 ## GHCR
 
-Docker image будет публиковаться в GitHub Container Registry на теги релизов.
+Образы публикуются в GitHub Container Registry.
 
-Ожидаемый адрес образа:
+Примеры:
 
 ```bash
 ghcr.io/fobos-dev/darknode:latest
-ghcr.io/fobos-dev/darknode:v0.1.0
+ghcr.io/fobos-dev/darknode:v0.1.1
+```
+
+## Серверный деплой
+
+Для сервера используйте готовые файлы из [deploy/](/D:/PROJECTS/VPN/deploy):
+
+- [docker-compose.ghcr.yml](/D:/PROJECTS/VPN/deploy/docker-compose.ghcr.yml)
+- [.env.server.example](/D:/PROJECTS/VPN/deploy/.env.server.example)
+- [DEPLOY.md](/D:/PROJECTS/VPN/deploy/DEPLOY.md)
+
+Базовый сценарий:
+
+```bash
+docker login ghcr.io
+docker compose -f deploy/docker-compose.ghcr.yml --env-file deploy/.env.server up -d
+docker compose -f deploy/docker-compose.ghcr.yml logs -f bot
 ```
 
 ## Тестовые данные
@@ -162,10 +179,14 @@ scripts/
 prisma/
   schema.prisma
   migrations/
+deploy/
+  docker-compose.ghcr.yml
+  .env.server.example
+  DEPLOY.md
 ```
 
 ## Замечания
 
 - `vless_url` и связанные поля считаются чувствительными данными
 - доступ к админ-командам ограничен через `ADMIN_TELEGRAM_ID`
-- для production следующим шагом логично добавить healthcheck, нормальный rollout миграций и process manager
+- для production следующим шагом логично добавить healthcheck, rollout миграций и резервное копирование SQLite

@@ -1,0 +1,9 @@
+services:
+  bot:
+    image: ghcr.io/fobos-dev/darknode:v0.1.1
+    container_name: darknode-bot
+    restart: unless-stopped
+    env_file:
+      - .env.server
+    volumes:
+      - ./prisma:/app/prisma
