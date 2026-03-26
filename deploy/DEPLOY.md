@@ -29,12 +29,19 @@ docker compose -f docker-compose.yml --env-file .env.server pull
 docker compose -f docker-compose.yml --env-file .env.server up -d
 ```
 
-The container applies `prisma migrate deploy` automatically before the bot starts.
+The `bot` container applies `prisma migrate deploy` automatically before the bot starts.
+The `reminders` container runs `npm run reminders:send` in a loop.
 
 ## Logs
 
 ```bash
 docker compose -f docker-compose.yml logs -f bot
+```
+
+Reminder logs:
+
+```bash
+docker compose -f docker-compose.yml logs -f reminders
 ```
 
 ## Health
@@ -57,16 +64,14 @@ Backups are written to the mounted `./backups` directory on the server.
 
 ## Expiry reminders
 
-Run reminder delivery manually:
+Automatic reminder delivery runs in the separate `reminders` service.
+
+By default it sleeps `86400` seconds between runs. Change that through `REMINDER_INTERVAL_SECONDS` in `.env.server`.
+
+If you need an immediate run outside the loop:
 
 ```bash
-docker compose -f docker-compose.yml --env-file .env.server exec bot npm run reminders:send
-```
-
-Recommended server cron example:
-
-```bash
-0 10 * * * cd /opt/darknode && docker compose -f docker-compose.yml --env-file .env.server exec -T bot npm run reminders:send >> /var/log/darknode-reminders.log 2>&1
+docker compose -f docker-compose.yml --env-file .env.server exec reminders npm run reminders:send
 ```
 
 The runner sends reminders only once for the same user, expiry date, and reminder window because it records delivery in `audit_logs`.

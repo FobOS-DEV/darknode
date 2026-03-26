@@ -13,3 +13,21 @@ services:
     volumes:
       - ./backups:/app/backups
       - ./prisma:/app/prisma
+  reminders:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vpn-telegram-reminders
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    stop_grace_period: 20s
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - while true; do npm run reminders:send; sleep "${REMINDER_INTERVAL_SECONDS:-86400}"; done
+    volumes:
+      - ./backups:/app/backups
+      - ./prisma:/app/prisma
