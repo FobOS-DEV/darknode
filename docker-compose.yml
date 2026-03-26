@@ -11,4 +11,5 @@ services:
     stop_grace_period: 20s
     working_dir: /app
     volumes:
+      - ./backups:/app/backups
       - ./prisma:/app/prisma

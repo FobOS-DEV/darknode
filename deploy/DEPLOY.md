@@ -7,6 +7,7 @@ Create these files on the server:
 - `docker-compose.yml` from `deploy/docker-compose.ghcr.yml`
 - `.env.server` from `deploy/.env.server.example`
 - directory `prisma/` for the SQLite database
+- directory `backups/` for SQLite backups
 
 By default the compose file uses `ghcr.io/fobos-dev/darknode:latest`.
 If you need a pinned rollout, replace it with a specific release tag.
@@ -43,6 +44,38 @@ docker compose -f docker-compose.yml ps
 ```
 
 The container has a built-in Docker healthcheck for SQLite access and required tables.
+
+## Backup
+
+Create a backup inside the running container:
+
+```bash
+docker compose -f docker-compose.yml --env-file .env.server exec bot npm run backup:sqlite
+```
+
+Backups are written to the mounted `./backups` directory on the server.
+
+## Restore
+
+1. Stop the bot:
+
+```bash
+docker compose -f docker-compose.yml --env-file .env.server stop bot
+```
+
+2. Restore the selected backup:
+
+```bash
+docker compose -f docker-compose.yml --env-file .env.server run --rm bot npm run restore:sqlite -- /app/backups/your-backup.db
+```
+
+3. Start the bot again:
+
+```bash
+docker compose -f docker-compose.yml --env-file .env.server up -d
+```
+
+The restore script creates a safety backup of the current SQLite file before overwriting it.
 
 ## Update
 

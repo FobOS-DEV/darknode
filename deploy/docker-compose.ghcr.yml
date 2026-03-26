@@ -8,4 +8,5 @@ services:
       - .env.server
     stop_grace_period: 20s
     volumes:
+      - ./backups:/app/backups
       - ./prisma:/app/prisma

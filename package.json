@@ -13,7 +13,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "seed:test": "node scripts/seed-test-data.js"
+    "seed:test": "node scripts/seed-test-data.js",
+    "backup:sqlite": "node scripts/backup-sqlite.js",
+    "restore:sqlite": "node scripts/restore-sqlite.js"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
