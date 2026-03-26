@@ -72,6 +72,21 @@ npm run build
 npm run start
 ```
 
+## Тесты
+
+Запуск автоматических проверок:
+
+```bash
+npm test
+```
+
+Покрыты базовые сценарии MVP:
+
+- `active / expired / not_found`
+- обновление срока действия
+- disable / enable
+- запись audit log для админских действий
+
 ## Docker
 
 Локальная сборка и запуск:
