@@ -109,6 +109,9 @@ docker compose down
 
 Важно: не запускайте одновременно несколько экземпляров бота с одним и тем же `BOT_TOKEN`.
 
+Контейнер при старте сам выполняет `prisma migrate deploy`, а затем запускает бота.
+В image также встроен Docker healthcheck, который проверяет доступность SQLite и наличие основных таблиц Prisma.
+
 ## GHCR
 
 Образы публикуются в GitHub Container Registry.
@@ -134,6 +137,12 @@ ghcr.io/fobos-dev/darknode:v0.1.1
 docker login ghcr.io
 docker compose -f deploy/docker-compose.ghcr.yml --env-file deploy/.env.server up -d
 docker compose -f deploy/docker-compose.ghcr.yml logs -f bot
+```
+
+Проверка состояния контейнера:
+
+```bash
+docker compose -f deploy/docker-compose.ghcr.yml ps
 ```
 
 ## Тестовые данные
@@ -204,4 +213,6 @@ deploy/
 
 - `vless_url` и связанные поля считаются чувствительными данными
 - доступ к админ-командам ограничен через `ADMIN_TELEGRAM_ID`
-- для production следующим шагом логично добавить healthcheck, rollout миграций и резервное копирование SQLite
+- контейнер сам применяет Prisma migration при старте
+- healthcheck проверяет, что SQLite доступна и схема БД инициализирована
+- для production следующим шагом логично добавить резервное копирование SQLite

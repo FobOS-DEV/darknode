@@ -8,6 +8,9 @@ Create these files on the server:
 - `.env.server` from `deploy/.env.server.example`
 - directory `prisma/` for the SQLite database
 
+By default the compose file uses `ghcr.io/fobos-dev/darknode:latest`.
+If you need a pinned rollout, replace it with a specific release tag.
+
 ## Login to GHCR
 
 If the package is private:
@@ -25,11 +28,21 @@ docker compose -f docker-compose.yml --env-file .env.server pull
 docker compose -f docker-compose.yml --env-file .env.server up -d
 ```
 
+The container applies `prisma migrate deploy` automatically before the bot starts.
+
 ## Logs
 
 ```bash
 docker compose -f docker-compose.yml logs -f bot
 ```
+
+## Health
+
+```bash
+docker compose -f docker-compose.yml ps
+```
+
+The container has a built-in Docker healthcheck for SQLite access and required tables.
 
 ## Update
 

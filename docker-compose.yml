@@ -4,9 +4,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: vpn-telegram-bot
+    init: true
     restart: unless-stopped
     env_file:
       - .env
+    stop_grace_period: 20s
     working_dir: /app
     volumes:
       - ./prisma:/app/prisma

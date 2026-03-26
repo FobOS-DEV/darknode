@@ -16,4 +16,6 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-CMD ["node", "dist/index.js"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 CMD ["npm", "run", "healthcheck"]
+
+CMD ["npm", "run", "start:container"]

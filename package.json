@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "start:container": "npm run prisma:deploy && npm run start",
     "build": "tsc -p tsconfig.json",
+    "healthcheck": "node dist/healthcheck.js",
     "test": "npm run prisma:generate && npm run build && node --test test/**/*.test.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

@@ -9,6 +9,7 @@ import { BotContext } from "./types/bot";
 
 async function bootstrap() {
   const bot = new Bot<BotContext>(env.botToken);
+  let isShuttingDown = false;
 
   logger.info("Starting bot polling");
 
@@ -19,8 +20,25 @@ async function bootstrap() {
     void error.ctx.reply(messages.unknownError).catch(() => undefined);
   });
 
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) {
+      return;
+    }
+
+    isShuttingDown = true;
+    logger.info({ signal }, "Stopping bot");
+
+    bot.stop();
+    await prisma.$disconnect();
+  };
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      void shutdown(signal);
+    });
+  }
+
   await bot.start();
-  logger.info("Bot started");
 }
 
 bootstrap().catch(async (error) => {
