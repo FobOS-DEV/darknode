@@ -21,7 +21,8 @@
     "@prisma/client": "^6.5.0",
     "dotenv": "^16.4.7",
     "grammy": "^1.35.0",
-    "pino": "^9.6.0"
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.13.14",

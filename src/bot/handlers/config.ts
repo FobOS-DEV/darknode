@@ -1,4 +1,8 @@
+import { InputFile } from "grammy";
+
+import { logger } from "../../config/logger";
 import { messages } from "../../constants/messages";
+import { qrCodeService } from "../../services/qrCodeService";
 import { vpnService } from "../../services/vpnService";
 import { TelegramBot } from "../../types/bot";
 import { createContactKeyboard } from "../keyboards/mainMenu";
@@ -26,6 +30,16 @@ async function replyWithConfig(ctx: any) {
     "",
     access.client.vlessUrl,
   ].join("\n"));
+
+  try {
+    const qrPng = await qrCodeService.generateConfigPng(access.client.vlessUrl);
+
+    await ctx.replyWithPhoto(new InputFile(qrPng, "vpn-config-qr.png"), {
+      caption: messages.configQrCaption,
+    });
+  } catch (error) {
+    logger.warn({ error, telegramId: identity.telegramId }, "Failed to generate config QR");
+  }
 }
 
 export function registerConfigHandler(bot: TelegramBot) {
@@ -35,4 +49,3 @@ export function registerConfigHandler(bot: TelegramBot) {
     await replyWithConfig(ctx);
   });
 }
-
