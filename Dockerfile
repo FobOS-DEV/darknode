@@ -13,6 +13,8 @@ COPY prisma ./prisma
 RUN npx prisma generate
 
 COPY tsconfig.json ./
+COPY proto ./proto
+COPY scripts ./scripts
 COPY src ./src
 RUN npm run build
 

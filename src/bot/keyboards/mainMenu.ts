@@ -15,3 +15,10 @@ export function createMainMenuKeyboard(): InlineKeyboard {
 export function createContactKeyboard(): InlineKeyboard {
   return new InlineKeyboard().url("Написать администратору", env.supportLink);
 }
+
+export function createRequestAccessKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("Подать заявку", callbacks.mainRequestAccess)
+    .row()
+    .url("Написать администратору", env.supportLink);
+}

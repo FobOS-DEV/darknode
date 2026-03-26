@@ -1,12 +1,18 @@
 import { vpnService } from "./vpnService";
 import type { VpnClientInput } from "./vpnService";
 import { auditService } from "./auditService";
+import { requestService } from "./requestService";
 import { userService } from "./userService";
+import { vpnGeneratorService } from "./vpnGeneratorService";
+import { xraySyncService } from "./xraySyncService";
+import { prisma } from "../db/prisma";
 
 const VPN_STATUS = {
   ACTIVE: "ACTIVE" as const,
   DISABLED: "DISABLED" as const,
 };
+
+export type AdminUserFilter = "all" | "active" | "expired" | "disabled" | "pending";
 
 export const adminService = {
   async addOrUpdateUser(actorUserId: number, input: VpnClientInput) {
@@ -17,6 +23,7 @@ export const adminService = {
       displayName: input.displayName,
       expiresAt: input.expiresAt?.toISOString() ?? null,
     });
+    await xraySyncService.syncAuthorizedClients();
 
     return client;
   },
@@ -29,6 +36,7 @@ export const adminService = {
         telegramId,
         expiresAt: expiresAt?.toISOString() ?? null,
       });
+      await xraySyncService.syncAuthorizedClients();
     }
 
     return client;
@@ -47,17 +55,298 @@ export const adminService = {
         client.user.id,
         { telegramId },
       );
+      await xraySyncService.syncAuthorizedClients();
     }
 
     return client;
   },
 
-  async listUsers() {
+  async listUsers(filter: AdminUserFilter = "all") {
+    const now = new Date();
+
+    if (filter === "pending") {
+      return prisma.user.findMany({
+        where: {
+          accessRequests: {
+            some: {
+              status: "PENDING",
+            },
+          },
+        },
+        include: {
+          vpnClient: true,
+          accessRequests: {
+            where: { status: "PENDING" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
+    if (filter === "active") {
+      return prisma.user.findMany({
+        where: {
+          vpnClient: {
+            is: {
+              status: "ACTIVE",
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+          },
+        },
+        include: { vpnClient: true },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
+    if (filter === "expired") {
+      return prisma.user.findMany({
+        where: {
+          vpnClient: {
+            is: {
+              status: { not: "DISABLED" },
+              expiresAt: { not: null, lte: now },
+            },
+          },
+        },
+        include: { vpnClient: true },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
+    if (filter === "disabled") {
+      return prisma.user.findMany({
+        where: {
+          vpnClient: {
+            is: {
+              status: "DISABLED",
+            },
+          },
+        },
+        include: { vpnClient: true },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
     return vpnService.listUsersWithClients();
+  },
+
+  async listPendingRequests() {
+    return requestService.listPendingRequests();
+  },
+
+  async listImportedClients() {
+    return prisma.user.findMany({
+      where: {
+        telegramId: {
+          startsWith: "imported:",
+        },
+        vpnClient: {
+          isNot: null,
+        },
+      },
+      include: {
+        vpnClient: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
   },
 
   async getUserInfo(telegramId: string) {
     return vpnService.getUserInfo(telegramId);
+  },
+
+  async bindImportedClient(actorUserId: number, targetTelegramId: string, lookup: string) {
+    const normalizedLookup = lookup.trim().toLowerCase();
+
+    const targetUser = await prisma.user.findUnique({
+      where: { telegramId: targetTelegramId },
+      include: { vpnClient: true },
+    });
+
+    if (!targetUser) {
+      return { ok: false as const, reason: "target_not_found" as const };
+    }
+
+    if (targetUser.vpnClient) {
+      return { ok: false as const, reason: "target_already_has_client" as const };
+    }
+
+    const importedUser = await prisma.user.findFirst({
+      where: {
+        telegramId: {
+          startsWith: "imported:",
+        },
+        vpnClient: {
+          isNot: null,
+        },
+        OR: [
+          { telegramId: lookup.trim() },
+          { vpnClient: { uuid: lookup.trim() } },
+          { vpnClient: { emailLabel: lookup.trim() } },
+          { vpnClient: { emailLabel: normalizedLookup } },
+        ],
+      },
+      include: { vpnClient: true },
+    });
+
+    if (!importedUser?.vpnClient) {
+      return { ok: false as const, reason: "imported_not_found" as const };
+    }
+
+    const client = await prisma.$transaction(async (tx) => {
+      const movedClient = await tx.vpnClient.update({
+        where: { id: importedUser.vpnClient!.id },
+        data: { userId: targetUser.id },
+        include: { user: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: "admin.bind_imported_client",
+          actorUserId,
+          targetUserId: targetUser.id,
+          payloadJson: JSON.stringify({
+            targetTelegramId,
+            importedUserId: importedUser.id,
+            importedTelegramId: importedUser.telegramId,
+            importedLookup: lookup.trim(),
+            emailLabel: importedUser.vpnClient!.emailLabel,
+            uuid: importedUser.vpnClient!.uuid,
+          }),
+        },
+      });
+
+      return movedClient;
+    });
+
+    await xraySyncService.syncAuthorizedClients();
+
+    return {
+      ok: true as const,
+      client,
+      importedUser,
+    };
+  },
+
+  async bindImportedClientToRequest(actorUserId: number, requestId: number, importedUserId: number) {
+    const request = await requestService.getRequestById(requestId);
+
+    if (!request || request.status !== "PENDING") {
+      return { ok: false as const, reason: "request_not_found" as const };
+    }
+
+    if (request.user.vpnClient) {
+      return { ok: false as const, reason: "target_already_has_client" as const };
+    }
+
+    const importedUser = await prisma.user.findFirst({
+      where: {
+        id: importedUserId,
+        telegramId: {
+          startsWith: "imported:",
+        },
+        vpnClient: {
+          isNot: null,
+        },
+      },
+      include: { vpnClient: true },
+    });
+
+    if (!importedUser?.vpnClient) {
+      return { ok: false as const, reason: "imported_not_found" as const };
+    }
+
+    const client = await prisma.$transaction(async (tx) => {
+      const movedClient = await tx.vpnClient.update({
+        where: { id: importedUser.vpnClient!.id },
+        data: { userId: request.user.id },
+        include: { user: true },
+      });
+
+      await tx.accessRequest.update({
+        where: { id: request.id },
+        data: {
+          status: "APPROVED",
+          resolvedAt: new Date(),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: "admin.bind_imported_client_to_request",
+          actorUserId,
+          targetUserId: request.user.id,
+          payloadJson: JSON.stringify({
+            requestId,
+            importedUserId: importedUser.id,
+            importedTelegramId: importedUser.telegramId,
+            emailLabel: importedUser.vpnClient!.emailLabel,
+            uuid: importedUser.vpnClient!.uuid,
+            targetTelegramId: request.user.telegramId,
+          }),
+        },
+      });
+
+      return movedClient;
+    });
+
+    await xraySyncService.syncAuthorizedClients();
+
+    return {
+      ok: true as const,
+      client,
+      importedUser,
+      request,
+    };
+  },
+
+  async approveRequest(actorUserId: number, requestId: number) {
+    const request = await requestService.getRequestById(requestId);
+
+    if (!request || request.status !== "PENDING") {
+      return null;
+    }
+
+    const generatedClient = vpnGeneratorService.generateForUser({
+      telegramId: request.user.telegramId,
+      username: request.user.username ?? undefined,
+      firstName: request.user.firstName ?? undefined,
+      lastName: request.user.lastName ?? undefined,
+      fullName: request.user.fullName,
+    });
+
+    const client = await vpnService.upsertVpnClient(generatedClient);
+    await requestService.approveRequest(requestId);
+    await xraySyncService.syncAuthorizedClients();
+
+    await auditService.log("admin.approve_request", actorUserId, request.user.id, {
+      requestId,
+      telegramId: request.user.telegramId,
+      expiresAt: client.expiresAt?.toISOString() ?? null,
+    });
+
+    return client;
+  },
+
+  async rejectRequest(actorUserId: number, requestId: number) {
+    const request = await requestService.getRequestById(requestId);
+
+    if (!request || request.status !== "PENDING") {
+      return null;
+    }
+
+    await requestService.rejectRequest(requestId);
+
+    await auditService.log("admin.reject_request", actorUserId, request.user.id, {
+      requestId,
+      telegramId: request.user.telegramId,
+    });
+
+    return request;
   },
 
   async ensureAdminRecord(
@@ -78,4 +367,3 @@ export const adminService = {
     );
   },
 };
-

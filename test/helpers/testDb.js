@@ -11,8 +11,13 @@ function toPrismaFileUrl(filePath) {
 function createTestDatabase() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vpn-bot-test-"));
   const dbPath = path.join(tempDir, "test.db");
-  const migrationPath = path.resolve(__dirname, "../../prisma/migrations/20260325195000_init/migration.sql");
-  const migrationSql = fs.readFileSync(migrationPath, "utf8");
+  const migrationsDir = path.resolve(__dirname, "../../prisma/migrations");
+  const migrationSql = fs
+    .readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((entry) => fs.readFileSync(path.join(migrationsDir, entry.name, "migration.sql"), "utf8"))
+    .join("\n");
 
   const db = new DatabaseSync(dbPath);
   db.exec(migrationSql);
@@ -35,13 +40,16 @@ function clearProjectModules() {
 
 function loadProjectModules(databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
+  process.env.XRAY_SYNC_ENABLED = "false";
   clearProjectModules();
 
   const { prisma } = require("../../dist/db/prisma.js");
   const { vpnService } = require("../../dist/services/vpnService.js");
   const { adminService } = require("../../dist/services/adminService.js");
+  const { requestService } = require("../../dist/services/requestService.js");
+  const { vpnGeneratorService } = require("../../dist/services/vpnGeneratorService.js");
 
-  return { prisma, vpnService, adminService };
+  return { prisma, vpnService, adminService, requestService, vpnGeneratorService };
 }
 
 async function disposeTestDatabase(prisma, tempDir) {

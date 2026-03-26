@@ -5,8 +5,16 @@ import { messages } from "../../constants/messages";
 import { qrCodeService } from "../../services/qrCodeService";
 import { vpnService } from "../../services/vpnService";
 import { TelegramBot } from "../../types/bot";
+import { formatDate } from "../../utils/dates";
 import { createContactKeyboard } from "../keyboards/mainMenu";
 import { getTelegramIdentity } from "./shared";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 async function replyWithConfig(ctx: any) {
   const identity = getTelegramIdentity(ctx);
@@ -24,12 +32,23 @@ async function replyWithConfig(ctx: any) {
     return;
   }
 
-  await ctx.reply([
-    access.client.displayName,
+  const configCard = [
+    `<b>${escapeHtml(access.client.displayName)}</b>`,
     messages.configIntro,
     "",
-    access.client.vlessUrl,
-  ].join("\n"));
+    `<b>Сервер:</b> <code>${escapeHtml(`${access.client.server}:${access.client.port}`)}</code>`,
+    `<b>Доступ до:</b> ${escapeHtml(formatDate(access.client.expiresAt))}`,
+  ].join("\n");
+
+  await ctx.reply(configCard, {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  });
+
+  await ctx.reply(`<code>${escapeHtml(access.client.vlessUrl)}</code>`, {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  });
 
   try {
     const qrPng = await qrCodeService.generateConfigPng(access.client.vlessUrl);

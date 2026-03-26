@@ -16,6 +16,47 @@ function getOptionalEnv(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
 }
 
+function getOptionalNullableEnv(name: string): string | null {
+  const value = process.env[name];
+  return value && value.trim() ? value : null;
+}
+
+function getOptionalNumberEnv(name: string, fallback: number): number {
+  const rawValue = process.env[name];
+
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${name} must be a valid integer`);
+  }
+
+  return parsed;
+}
+
+function getOptionalBooleanEnv(name: string, fallback: boolean): boolean {
+  const rawValue = process.env[name];
+
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  throw new Error(`${name} must be a boolean value`);
+}
+
 function getReminderDays(): number[] {
   const rawValue = getOptionalEnv("REMINDER_DAYS", "7,3,1");
 
@@ -51,6 +92,25 @@ export const env = {
     "https://telegra.ph/Instrukciya-po-podklyucheniyu-03-25",
   ),
   reminderDays: getReminderDays(),
+  vpnServerHost: getOptionalEnv("VPN_SERVER_HOST", "vpn.example.com"),
+  vpnServerPort: getOptionalNumberEnv("VPN_SERVER_PORT", 443),
+  vpnPublicKey: getOptionalEnv("VPN_PUBLIC_KEY", "change-me"),
+  vpnSni: getOptionalEnv("VPN_SNI", "example.com"),
+  vpnShortId: getOptionalEnv("VPN_SHORT_ID", "change-me"),
+  vpnFlow: getOptionalEnv("VPN_FLOW", "xtls-rprx-vision"),
+  vpnFingerprint: getOptionalEnv("VPN_FINGERPRINT", "chrome"),
+  vpnDefaultExpiryDays: getOptionalNumberEnv("VPN_DEFAULT_EXPIRY_DAYS", 30),
+  xraySyncEnabled: getOptionalBooleanEnv("XRAY_SYNC_ENABLED", false),
+  xrayHotSyncEnabled: getOptionalBooleanEnv("XRAY_HOT_SYNC_ENABLED", false),
+  sshHost: getOptionalNullableEnv("SSH_HOST"),
+  sshPort: getOptionalNumberEnv("SSH_PORT", 22),
+  sshUser: getOptionalNullableEnv("SSH_USER"),
+  sshPassword: getOptionalNullableEnv("SSH_PASSWORD"),
+  sshKeyPath: getOptionalNullableEnv("SSH_KEY_PATH"),
+  xrayConfigPath: getOptionalEnv("XRAY_CONFIG_PATH", "/opt/xray-reality/config.json"),
+  xrayContainerName: getOptionalEnv("XRAY_CONTAINER_NAME", "xray-reality"),
+  xrayApiAddress: getOptionalNullableEnv("XRAY_API_ADDRESS"),
+  xrayInboundTag: getOptionalEnv("XRAY_INBOUND_TAG", "vless-reality"),
   timezone: getOptionalEnv("TZ", "UTC"),
   supportLink: getRequiredEnv("SUPPORT_LINK"),
 };

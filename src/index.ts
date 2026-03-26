@@ -5,6 +5,7 @@ import { messages } from "./constants/messages";
 import { env } from "./config/env";
 import { logger } from "./config/logger";
 import { prisma } from "./db/prisma";
+import { xraySyncService } from "./services/xraySyncService";
 import { BotContext } from "./types/bot";
 
 async function bootstrap() {
@@ -36,6 +37,17 @@ async function bootstrap() {
     process.once(signal, () => {
       void shutdown(signal);
     });
+  }
+
+  if (xraySyncService.isEnabled()) {
+    try {
+      const syncResult = await xraySyncService.syncAuthorizedClients();
+      logger.info(syncResult, "Initial Xray sync completed");
+    } catch (error) {
+      logger.error({ error }, "Initial Xray sync failed");
+    }
+  } else {
+    logger.warn("Initial Xray sync skipped because SSH access is not configured");
   }
 
   await bot.start();
