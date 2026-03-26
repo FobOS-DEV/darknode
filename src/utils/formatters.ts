@@ -4,14 +4,14 @@ import { formatDate, getDaysLeft } from "./dates";
 
 export function formatStatusLabel(status: VpnStatusValue): string {
   if (status === "ACTIVE") {
-    return "active";
+    return "активен";
   }
 
   if (status === "EXPIRED") {
-    return "expired";
+    return "истёк";
   }
 
-  return "disabled";
+  return "отключён";
 }
 
 export function formatStatusMessage(params: {
@@ -30,4 +30,3 @@ export function formatStatusMessage(params: {
     `Доступ до: ${formatDate(params.expiresAt)}`,
   ].join("\n") + daysLeftLine;
 }
-

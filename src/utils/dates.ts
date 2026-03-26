@@ -8,7 +8,7 @@ export function isExpired(expiresAt: Date | null, now = new Date()): boolean {
 
 export function formatDate(date: Date | null): string {
   if (!date) {
-    return "Р±РµР· РѕРіСЂР°РЅРёС‡РµРЅРёСЏ";
+    return "без ограничения";
   }
 
   return new Intl.DateTimeFormat("ru-RU", {
@@ -26,4 +26,3 @@ export function getDaysLeft(expiresAt: Date | null, now = new Date()): number | 
   const diff = expiresAt.getTime() - now.getTime();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
-
