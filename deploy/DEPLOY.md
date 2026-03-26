@@ -55,6 +55,22 @@ docker compose -f docker-compose.yml --env-file .env.server exec bot npm run bac
 
 Backups are written to the mounted `./backups` directory on the server.
 
+## Expiry reminders
+
+Run reminder delivery manually:
+
+```bash
+docker compose -f docker-compose.yml --env-file .env.server exec bot npm run reminders:send
+```
+
+Recommended server cron example:
+
+```bash
+0 10 * * * cd /opt/darknode && docker compose -f docker-compose.yml --env-file .env.server exec -T bot npm run reminders:send >> /var/log/darknode-reminders.log 2>&1
+```
+
+The runner sends reminders only once for the same user, expiry date, and reminder window because it records delivery in `audit_logs`.
+
 ## Restore
 
 1. Stop the bot:
