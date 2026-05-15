@@ -1,0 +1,21 @@
+{
+	email {$SUB_TLS_EMAIL:admin@example.com}
+}
+
+{$SUB_DOMAIN} {
+	encode zstd gzip
+
+	@subscriptions path /sub/* /healthz
+	handle @subscriptions {
+		reverse_proxy bot:3001
+	}
+
+	handle {
+		respond "not found" 404
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

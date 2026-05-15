@@ -111,6 +111,9 @@ export const env = {
   xrayContainerName: getOptionalEnv("XRAY_CONTAINER_NAME", "xray-reality"),
   xrayApiAddress: getOptionalNullableEnv("XRAY_API_ADDRESS"),
   xrayInboundTag: getOptionalEnv("XRAY_INBOUND_TAG", "vless-reality"),
+  subBaseUrl: getRequiredEnv("SUB_BASE_URL"),
+  subHttpHost: getOptionalEnv("SUB_HTTP_HOST", "0.0.0.0"),
+  subHttpPort: getOptionalNumberEnv("SUB_HTTP_PORT", 3001),
   timezone: getOptionalEnv("TZ", "UTC"),
   supportLink: getRequiredEnv("SUPPORT_LINK"),
 };

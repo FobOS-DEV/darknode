@@ -10,6 +10,8 @@ services:
       - .env
     environment:
       DATABASE_URL: file:/app/prisma/dev.db
+    expose:
+      - "3001"
     extra_hosts:
       - host.docker.internal:host-gateway
     stop_grace_period: 20s
@@ -17,6 +19,22 @@ services:
     volumes:
       - ./backups:/app/backups
       - ./prisma:/app/prisma
+  caddy:
+    image: caddy:2-alpine
+    container_name: vpn-telegram-caddy
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - bot
   reminders:
     build:
       context: .
@@ -61,3 +79,7 @@ services:
     volumes:
       - ./backups:/app/backups
       - ./prisma:/app/prisma
+
+volumes:
+  caddy_data:
+  caddy_config:

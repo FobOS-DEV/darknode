@@ -18,10 +18,35 @@ model User {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   vpnClient      VpnClient?
+  subscription   Subscription?
   accessRequests AccessRequest[]
   auditLogs      AuditLog[]      @relation("actorAuditLogs")
   targetedBy     AuditLog[]      @relation("targetAuditLogs")
   trafficSnapshots TrafficSnapshot[]
+}
+
+model Inbound {
+  id              Int       @id @default(autoincrement())
+  label           String
+  inboundTag      String    @unique
+  host            String
+  port            Int
+  sni             String
+  publicKey       String
+  shortId         String
+  flow            String
+  fingerprint     String    @default("chrome")
+  network         String    @default("tcp")
+  security        String    @default("reality")
+  xrayApiAddress  String?
+  status          String    @default("ACTIVE")
+  priority        Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deprecatedAt    DateTime?
+  vpnClients      VpnClient[]
+
+  @@index([status, priority])
 }
 
 model VpnClient {
@@ -41,8 +66,23 @@ model VpnClient {
   createdAt   DateTime @default(now())
   expiresAt   DateTime?
   updatedAt   DateTime @updatedAt
+  inboundId   Int?
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inbound     Inbound? @relation(fields: [inboundId], references: [id], onDelete: SetNull)
   trafficSnapshots TrafficSnapshot[]
+
+  @@index([inboundId])
+}
+
+model Subscription {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @unique
+  token          String    @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  revokedAt      DateTime?
+  lastAccessedAt DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuditLog {
