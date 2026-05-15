@@ -196,6 +196,46 @@ test("subscriptionService skips STANDBY inbounds", async () => {
   }
 });
 
+test("subscriptionService includes traffic + expire in userInfo", async () => {
+  const db = createTestDatabase();
+  const { prisma, vpnService } = loadProjectModules(db.databaseUrl);
+  const subscriptionService = await loadSubscriptionModule();
+
+  try {
+    await seedInbound(prisma);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await vpnService.upsertVpnClient(
+      buildVpnInput({
+        telegramId: "7100",
+        uuid: "77777777-7777-4777-8777-777777777777",
+        expiresAt,
+      }),
+    );
+
+    const user = await prisma.user.findUnique({ where: { telegramId: "7100" } });
+    const vpnClient = await prisma.vpnClient.findUnique({ where: { userId: user.id } });
+    await prisma.trafficSnapshot.create({
+      data: {
+        userId: user.id,
+        vpnClientId: vpnClient.id,
+        uplinkBytes: 12345,
+        downlinkBytes: 67890,
+        totalBytes: 12345 + 67890,
+      },
+    });
+
+    const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
+    const result = await subscriptionService.resolveByToken(sub.token);
+
+    assert.equal(result.kind, "ok");
+    assert.equal(result.userInfo.uploadBytes, 12345);
+    assert.equal(result.userInfo.downloadBytes, 67890);
+    assert.equal(result.userInfo.expireUnix, Math.floor(expiresAt.getTime() / 1000));
+  } finally {
+    await disposeTestDatabase(prisma, db.tempDir);
+  }
+});
+
 test("subscriptionService rotates tokens on demand", async () => {
   const db = createTestDatabase();
   const { prisma, vpnService } = loadProjectModules(db.databaseUrl);

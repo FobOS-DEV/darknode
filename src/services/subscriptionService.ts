@@ -32,10 +32,22 @@ type VpnClientForProfile = {
   expiresAt: Date | null;
 };
 
+export type SubscriptionUserInfo = {
+  uploadBytes: number;
+  downloadBytes: number;
+  expireUnix: number | null;
+};
+
 export type SubscriptionLookupResult =
   | { kind: "not_found" }
   | { kind: "revoked" }
-  | { kind: "ok"; content: string; inboundCount: number; userTelegramId: string };
+  | {
+      kind: "ok";
+      content: string;
+      inboundCount: number;
+      userTelegramId: string;
+      userInfo: SubscriptionUserInfo;
+    };
 
 function slugifyLabel(value: string): string {
   return value
@@ -64,6 +76,19 @@ function buildVlessUrl(client: VpnClientForProfile, inbound: InboundForProfile):
 
   const label = buildProfileLabel(client, inbound);
   return `vless://${client.uuid}@${inbound.host}:${inbound.port}?${query.toString()}#${label}`;
+}
+
+async function loadUserInfo(userId: number, expiresAt: Date | null): Promise<SubscriptionUserInfo> {
+  const latest = await prisma.trafficSnapshot.findFirst({
+    where: { userId },
+    orderBy: { capturedAt: "desc" },
+  });
+
+  return {
+    uploadBytes: latest?.uplinkBytes ?? 0,
+    downloadBytes: latest?.downlinkBytes ?? 0,
+    expireUnix: expiresAt ? Math.floor(expiresAt.getTime() / 1000) : null,
+  };
 }
 
 function isClientServiceable(client: VpnClientForProfile): boolean {
@@ -116,6 +141,7 @@ export const subscriptionService = {
       });
 
     const vpnClient = subscription.user.vpnClient;
+    const userInfo = await loadUserInfo(subscription.user.id, vpnClient?.expiresAt ?? null);
 
     if (!vpnClient || !isClientServiceable(vpnClient)) {
       return {
@@ -123,6 +149,7 @@ export const subscriptionService = {
         content: "",
         inboundCount: 0,
         userTelegramId: subscription.user.telegramId,
+        userInfo,
       };
     }
 
@@ -137,6 +164,7 @@ export const subscriptionService = {
         content: "",
         inboundCount: 0,
         userTelegramId: subscription.user.telegramId,
+        userInfo,
       };
     }
 
@@ -148,6 +176,7 @@ export const subscriptionService = {
       content,
       inboundCount: inbounds.length,
       userTelegramId: subscription.user.telegramId,
+      userInfo,
     };
   },
 

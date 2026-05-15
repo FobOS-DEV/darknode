@@ -99,29 +99,29 @@ const addUserFieldOrder: AddUserField[] = [
 ];
 
 const addUserPrompts: Record<AddUserField, string> = {
-  telegramId: "Р’РІРµРґРёС‚Рµ Telegram ID РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
-  fullName: "Р’РІРµРґРёС‚Рµ РїРѕР»РЅРѕРµ РёРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
-  displayName: "Р’РІРµРґРёС‚Рµ display name РґР»СЏ VPN-РєР»РёРµРЅС‚Р°.",
-  emailLabel: "Р’РІРµРґРёС‚Рµ email label.",
-  uuid: "Р’РІРµРґРёС‚Рµ UUID РєР»РёРµРЅС‚Р°.",
-  vlessUrl: "Р’СЃС‚Р°РІСЊС‚Рµ РїРѕР»РЅС‹Р№ VLESS URL.",
-  server: "Р’РІРµРґРёС‚Рµ Р°РґСЂРµСЃ СЃРµСЂРІРµСЂР°.",
-  port: "Р’РІРµРґРёС‚Рµ РїРѕСЂС‚, РЅР°РїСЂРёРјРµСЂ 443.",
-  publicKey: "Р’РІРµРґРёС‚Рµ public key.",
-  shortId: "Р’РІРµРґРёС‚Рµ short id.",
-  sni: "Р’РІРµРґРёС‚Рµ SNI.",
-  flow: "Р’РІРµРґРёС‚Рµ flow, РЅР°РїСЂРёРјРµСЂ xtls-rprx-vision.",
-  expiresAt: "Р’РІРµРґРёС‚Рµ РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ РІ С„РѕСЂРјР°С‚Рµ YYYY-MM-DD РёР»Рё `none`.",
+  telegramId: "Введите Telegram ID пользователя.",
+  fullName: "Введите полное имя пользователя.",
+  displayName: "Введите display name для VPN-клиента.",
+  emailLabel: "Введите email label.",
+  uuid: "Введите UUID клиента.",
+  vlessUrl: "Вставьте полный VLESS URL.",
+  server: "Введите адрес сервера.",
+  port: "Введите порт, например 443.",
+  publicKey: "Введите public key.",
+  shortId: "Введите short id.",
+  sni: "Введите SNI.",
+  flow: "Введите flow, например xtls-rprx-vision.",
+  expiresAt: "Введите дату окончания в формате YYYY-MM-DD или `none`.",
 };
 
 const setExpiryPrompts: Record<SetExpiryField, string> = {
-  telegramId: "Р’РІРµРґРёС‚Рµ Telegram ID РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
-  expiresAt: "Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ РІ С„РѕСЂРјР°С‚Рµ YYYY-MM-DD РёР»Рё `none`.",
+  telegramId: "Введите Telegram ID пользователя.",
+  expiresAt: "Введите новую дату окончания в формате YYYY-MM-DD или `none`.",
 };
 
 const bindClientPrompts: Record<BindClientField, string> = {
-  telegramId: "Р’РІРµРґРёС‚Рµ Telegram ID РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ, Рє РєРѕС‚РѕСЂРѕРјСѓ РЅСѓР¶РЅРѕ РїСЂРёРІСЏР·Р°С‚СЊ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ РєР»РёРµРЅС‚.",
-  lookup: "Р’РІРµРґРёС‚Рµ email label, UUID РёР»Рё imported:... РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РєР»РёРµРЅС‚Р°.",
+  telegramId: "Введите Telegram ID пользователя, к которому нужно привязать существующий клиент.",
+  lookup: "Введите email label, UUID или imported:... идентификатор клиента.",
 };
 
 const adminStates = new Map<string, AdminState>();
@@ -143,7 +143,7 @@ function parseExpiryValue(value: string): { ok: true; value: Date | null } | { o
   const trimmed = value.trim();
 
   if (!trimmed) {
-    return { ok: false, error: "РџСѓСЃС‚РѕРµ Р·РЅР°С‡РµРЅРёРµ РЅРµ РїРѕРґС…РѕРґРёС‚. РџРѕРїСЂРѕР±СѓР№С‚Рµ РµС‰С‘ СЂР°Р·." };
+    return { ok: false, error: "Пустое значение не подходит. Попробуйте ещё раз." };
   }
 
   if (trimmed.toLowerCase() === "none") {
@@ -153,7 +153,7 @@ function parseExpiryValue(value: string): { ok: true; value: Date | null } | { o
   const expiresAt = new Date(trimmed);
 
   if (Number.isNaN(expiresAt.getTime())) {
-    return { ok: false, error: "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РґР°С‚Р°. РСЃРїРѕР»СЊР·СѓР№С‚Рµ С„РѕСЂРјР°С‚ YYYY-MM-DD РёР»Рё `none`." };
+    return { ok: false, error: "Некорректная дата. Используйте формат YYYY-MM-DD или `none`." };
   }
 
   return { ok: true, value: expiresAt };
@@ -166,14 +166,14 @@ function parseAddUserValue(
   const trimmed = value.trim();
 
   if (!trimmed) {
-    return { ok: false, error: "РџСѓСЃС‚РѕРµ Р·РЅР°С‡РµРЅРёРµ РЅРµ РїРѕРґС…РѕРґРёС‚. РџРѕРїСЂРѕР±СѓР№С‚Рµ РµС‰С‘ СЂР°Р·." };
+    return { ok: false, error: "Пустое значение не подходит. Попробуйте ещё раз." };
   }
 
   if (step === "port") {
     const port = Number(trimmed);
 
     if (!Number.isInteger(port)) {
-      return { ok: false, error: "РџРѕСЂС‚ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ С†РµР»С‹Рј С‡РёСЃР»РѕРј." };
+      return { ok: false, error: "Порт должен быть целым числом." };
     }
 
     return { ok: true, value: port };
@@ -229,17 +229,17 @@ async function getAdminIdentity(ctx: any) {
 async function sendAdminMenu(ctx: any) {
   await ctx.reply(
     [
-      "РђРґРјРёРЅ-РєРѕРјР°РЅРґС‹:",
-      "/requests - СЃРїРёСЃРѕРє РЅРѕРІС‹С… Р·Р°СЏРІРѕРє",
-      "/imported - СЃРїРёСЃРѕРє РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅРЅС‹С… РєР»РёРµРЅС‚РѕРІ",
-      "/bindclient - РїСЂРёРІСЏР·Р°С‚СЊ imported-РєР»РёРµРЅС‚Р° Рє СЂРµР°Р»СЊРЅРѕРјСѓ Telegram ID",
-      "/adduser - СЂСѓС‡РЅРѕРµ РґРѕР±Р°РІР»РµРЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ",
-      "/setexpiry - РёР·РјРµРЅРёС‚СЊ СЃСЂРѕРє РґРµР№СЃС‚РІРёСЏ",
-      "/disable - РѕС‚РєР»СЋС‡РёС‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ",
-      "/enable - РІРєР»СЋС‡РёС‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ",
-      "/listusers - РІСЃРµ РїРѕР»СЊР·РѕРІР°С‚РµР»Рё",
-      "/userinfo <telegram_id> - РєР°СЂС‚РѕС‡РєР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ",
-      "/cancel - РѕС‚РјРµРЅРёС‚СЊ Р°РєС‚РёРІРЅС‹Р№ СЃС†РµРЅР°СЂРёР№",
+      "Админ-команды:",
+      "/requests - список новых заявок",
+      "/imported - список импортированных клиентов",
+      "/bindclient - привязать imported-клиента к реальному Telegram ID",
+      "/adduser - ручное добавление пользователя",
+      "/setexpiry - изменить срок действия",
+      "/disable - отключить пользователя",
+      "/enable - включить пользователя",
+      "/listusers - все пользователи",
+      "/userinfo <telegram_id> - карточка пользователя",
+      "/cancel - отменить активный сценарий",
     ].join("\n"),
     { reply_markup: createAdminMenuKeyboard() },
   );
@@ -249,11 +249,11 @@ async function sendPendingRequests(ctx: any) {
   const requests = await adminService.listPendingRequests();
 
   if (requests.length === 0) {
-    await ctx.reply("РќРѕРІС‹С… Р·Р°СЏРІРѕРє СЃРµР№С‡Р°СЃ РЅРµС‚.");
+    await ctx.reply("Новых заявок сейчас нет.");
     return;
   }
 
-  await ctx.reply("РќРѕРІС‹Рµ Р·Р°СЏРІРєРё:", {
+  await ctx.reply("Новые заявки:", {
     reply_markup: createPendingRequestsKeyboard(requests),
   });
 }
@@ -262,7 +262,7 @@ async function sendImportedClients(ctx: any) {
   const importedClients = await adminService.listImportedClients();
 
   if (importedClients.length === 0) {
-    await ctx.reply("РЎРІРѕР±РѕРґРЅС‹С… imported-РєР»РёРµРЅС‚РѕРІ СЃРµР№С‡Р°СЃ РЅРµС‚.");
+    await ctx.reply("Свободных imported-клиентов сейчас нет.");
     return;
   }
 
@@ -281,19 +281,19 @@ async function sendImportedClientsForRequest(ctx: any, requestId: number) {
   const request = await requestService.getRequestById(requestId);
 
   if (!request || request.status !== "PENDING") {
-    await ctx.reply("Р—Р°СЏРІРєР° РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅР°.");
+    await ctx.reply("Заявка не найдена или уже обработана.");
     return;
   }
 
   const importedClients = await adminService.listImportedClients();
 
   if (importedClients.length === 0) {
-    await ctx.reply("РЎРІРѕР±РѕРґРЅС‹С… imported-РєР»РёРµРЅС‚РѕРІ СЃРµР№С‡Р°СЃ РЅРµС‚.");
+    await ctx.reply("Свободных imported-клиентов сейчас нет.");
     return;
   }
 
   await ctx.reply(
-    `Р’С‹Р±РµСЂРёС‚Рµ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ РєР»РёРµРЅС‚ РґР»СЏ Р·Р°СЏРІРєРё #${requestId}:`,
+    `Выберите существующий клиент для заявки #${requestId}:`,
     {
       reply_markup: createImportedClientsForRequestKeyboard(requestId, importedClients),
     },
@@ -308,18 +308,18 @@ async function sendUserPicker(
   const users = await adminService.listUsers(filter);
 
   if (users.length === 0) {
-    await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»РµР№ РїРѕРєР° РЅРµС‚.");
+    await ctx.reply("Пользователей пока нет.");
     return;
   }
 
   const title =
     action === "userinfo"
-      ? "Р’С‹Р±РµСЂРёС‚Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РґР»СЏ РєР°СЂС‚РѕС‡РєРё:"
+      ? "Выберите пользователя для карточки:"
       : action === "setexpiry"
-        ? "Р’С‹Р±РµСЂРёС‚Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ СЃСЂРѕРєР°:"
+        ? "Выберите пользователя для изменения срока:"
         : action === "disable"
-          ? "Р’С‹Р±РµСЂРёС‚Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РґР»СЏ РѕС‚РєР»СЋС‡РµРЅРёСЏ:"
-          : "Р’С‹Р±РµСЂРёС‚Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РґР»СЏ РІРєР»СЋС‡РµРЅРёСЏ:";
+          ? "Выберите пользователя для отключения:"
+          : "Выберите пользователя для включения:";
 
   await ctx.reply(title, {
     reply_markup: createUserPickerKeyboard(action, users),
@@ -329,8 +329,8 @@ async function sendUserPicker(
 async function sendUserFilterPicker(ctx: any, action: "userinfo" | "listusers") {
   const title =
     action === "userinfo"
-      ? "Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂћР С‘Р В»РЎРЉРЎвЂљРЎР‚ Р Т‘Р В»РЎРЏ Р С”Р В°РЎР‚РЎвЂљР С•РЎвЂЎР С”Р С‘ Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»РЎРЏ:"
-      : "Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂћР С‘Р В»РЎРЉРЎвЂљРЎР‚ Р Т‘Р В»РЎРЏ РЎРѓР С—Р С‘РЎРѓР С”Р В° Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»Р ВµР в„–:";
+      ? "Выберите фильтр для карточки пользователя:"
+      : "Выберите фильтр для списка пользователей:";
 
   await ctx.reply(title, {
     reply_markup: createUserFilterKeyboard(action),
@@ -346,13 +346,13 @@ async function sendFilteredUserList(ctx: any, filter: AdminUserFilter) {
   const users = await adminService.listUsers(filter);
 
   if (users.length === 0) {
-    await ctx.reply(`Р СџР С• РЎвЂћР С‘Р В»РЎРЉРЎвЂљРЎР‚РЎС“ ${formatFilterLabel(filter)} Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»Р ВµР в„– Р С—Р С•Р С”Р В° Р Р…Р ВµРЎвЂљ.`);
+    await ctx.reply(`По фильтру ${formatFilterLabel(filter)} пользователей пока нет.`);
     return;
   }
 
   await ctx.reply(
     [
-      `Р РЋР С—Р С‘РЎРѓР С•Р С” Р С—Р С• РЎвЂћР С‘Р В»РЎРЉРЎвЂљРЎР‚РЎС“: ${formatFilterLabel(filter)}`,
+      `Список по фильтру: ${formatFilterLabel(filter)}`,
       "",
       users
         .map((user: { fullName: string; telegramId: string; vpnClient: { status: string } | null }) => {
@@ -393,19 +393,19 @@ async function sendRequestDetails(ctx: any, requestId: number) {
   const request = await requestService.getRequestById(requestId);
 
   if (!request) {
-    await ctx.reply("Р—Р°СЏРІРєР° РЅРµ РЅР°Р№РґРµРЅР°.");
+    await ctx.reply("Заявка не найдена.");
     return;
   }
 
   await ctx.reply(
     [
-      `Р—Р°СЏРІРєР° #${request.id}`,
-      `РЎС‚Р°С‚СѓСЃ: ${request.status.toLowerCase()}`,
-      `РРјСЏ: ${request.user.fullName}`,
+      `Заявка #${request.id}`,
+      `Статус: ${request.status.toLowerCase()}`,
+      `Имя: ${request.user.fullName}`,
       `Telegram ID: ${request.user.telegramId}`,
       `Username: ${request.user.username ?? "-"}`,
-      `РЎРѕР·РґР°РЅР°: ${formatDate(request.createdAt)}`,
-      `РўРµРєСѓС‰РёР№ РєР»РёРµРЅС‚: ${request.user.vpnClient ? "РµСЃС‚СЊ" : "РЅРµС‚"}`,
+      `Создана: ${formatDate(request.createdAt)}`,
+      `Текущий клиент: ${request.user.vpnClient ? "есть" : "нет"}`,
     ].join("\n"),
     request.status === "PENDING"
       ? { reply_markup: createRequestDecisionKeyboard(request.id) }
@@ -422,8 +422,8 @@ async function startAddUserFlow(ctx: any, adminIdentity: { telegramId: string })
 
   await ctx.reply(
     [
-      "Р—Р°РїСѓСЃРєР°СЋ РїРѕС€Р°РіРѕРІРѕРµ СЂСѓС‡РЅРѕРµ РґРѕР±Р°РІР»РµРЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
-      "РћС‚РїСЂР°РІСЊС‚Рµ `/cancel`, РµСЃР»Рё Р·Р°С…РѕС‚РёС‚Рµ РѕС‚РјРµРЅРёС‚СЊ СЃС†РµРЅР°СЂРёР№.",
+      "Запускаю пошаговое ручное добавление пользователя.",
+      "Отправьте `/cancel`, если захотите отменить сценарий.",
       "",
       addUserPrompts.telegramId,
     ].join("\n"),
@@ -440,8 +440,8 @@ async function startSetExpiryFlow(ctx: any, adminIdentity: { telegramId: string 
 
   await ctx.reply(
     [
-      "Р—Р°РїСѓСЃРєР°СЋ РїРѕС€Р°РіРѕРІРѕРµ РёР·РјРµРЅРµРЅРёРµ СЃСЂРѕРєР° РґРµР№СЃС‚РІРёСЏ.",
-      "РћС‚РїСЂР°РІСЊС‚Рµ `/cancel`, РµСЃР»Рё Р·Р°С…РѕС‚РёС‚Рµ РѕС‚РјРµРЅРёС‚СЊ СЃС†РµРЅР°СЂРёР№.",
+      "Запускаю пошаговое изменение срока действия.",
+      "Отправьте `/cancel`, если захотите отменить сценарий.",
       "",
       setExpiryPrompts.telegramId,
     ].join("\n"),
@@ -458,8 +458,8 @@ async function startSetExpiryDateFlow(ctx: any, adminIdentity: { telegramId: str
 
   await ctx.reply(
     [
-      "Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ РІ С„РѕСЂРјР°С‚Рµ YYYY-MM-DD РёР»Рё `none`.",
-      "РћС‚РїСЂР°РІСЊС‚Рµ `/cancel`, РµСЃР»Рё Р·Р°С…РѕС‚РёС‚Рµ РѕС‚РјРµРЅРёС‚СЊ СЃС†РµРЅР°СЂРёР№.",
+      "Введите новую дату окончания в формате YYYY-MM-DD или `none`.",
+      "Отправьте `/cancel`, если захотите отменить сценарий.",
     ].join("\n"),
     { parse_mode: "Markdown" },
   );
@@ -475,16 +475,16 @@ async function sendSetExpiryOptions(ctx: any, telegramId: string) {
   const user = await adminService.getUserInfo(telegramId);
 
   if (!user) {
-    await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+    await ctx.reply("Пользователь не найден.");
     return false;
   }
 
   await ctx.reply(
     [
-      `Р’С‹Р±РµСЂРёС‚Рµ РЅРѕРІС‹Р№ СЃСЂРѕРє РґР»СЏ ${user.fullName}.`,
-      `РўРµРєСѓС‰РёР№ СЃСЂРѕРє: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
+      `Выберите новый срок для ${user.fullName}.`,
+      `Текущий срок: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
       "",
-      "РњРѕР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ Р±С‹СЃС‚СЂС‹Р№ РІР°СЂРёР°РЅС‚ РёР»Рё РїРµСЂРµР№С‚Рё Рє СЂСѓС‡РЅРѕРјСѓ РІРІРѕРґСѓ РґР°С‚С‹.",
+      "Можно выбрать быстрый вариант или перейти к ручному вводу даты.",
     ].join("\n"),
     {
       reply_markup: createExpiryOptionsKeyboard(telegramId),
@@ -536,7 +536,7 @@ async function applyQuickExpiry(ctx: any, admin: NonNullable<Awaited<ReturnType<
   const user = await adminService.getUserInfo(telegramId);
 
   if (!user?.vpnClient) {
-    await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+    await ctx.reply("Пользователь или VPN-клиент не найден.");
     return;
   }
 
@@ -547,12 +547,12 @@ async function applyQuickExpiry(ctx: any, admin: NonNullable<Awaited<ReturnType<
   const client = await adminService.setExpiry(admin.adminUser.id, telegramId, expiresAt);
 
   if (!client) {
-    await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+    await ctx.reply("Пользователь или VPN-клиент не найден.");
     return;
   }
 
   adminStates.delete(admin.identity.telegramId);
-  await ctx.reply(`РЎСЂРѕРє РїСЂРѕРґР»С‘РЅ РЅР° ${days} РґРЅРµР№. РќРѕРІС‹Р№ СЃСЂРѕРє РґРµР№СЃС‚РІРёСЏ: ${formatDate(client.expiresAt)}.`);
+  await ctx.reply(`Срок продлён на ${days} дней. Новый срок действия: ${formatDate(client.expiresAt)}.`);
 }
 
 async function startToggleFlow(ctx: any, adminIdentity: { telegramId: string }, kind: "disable" | "enable") {
@@ -561,11 +561,11 @@ async function startToggleFlow(ctx: any, adminIdentity: { telegramId: string }, 
   await ctx.reply(
     [
       kind === "disable"
-        ? "Р—Р°РїСѓСЃРєР°СЋ РїРѕС€Р°РіРѕРІРѕРµ РѕС‚РєР»СЋС‡РµРЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ."
-        : "Р—Р°РїСѓСЃРєР°СЋ РїРѕС€Р°РіРѕРІРѕРµ РІРєР»СЋС‡РµРЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
-      "РћС‚РїСЂР°РІСЊС‚Рµ `/cancel`, РµСЃР»Рё Р·Р°С…РѕС‚РёС‚Рµ РѕС‚РјРµРЅРёС‚СЊ СЃС†РµРЅР°СЂРёР№.",
+        ? "Запускаю пошаговое отключение пользователя."
+        : "Запускаю пошаговое включение пользователя.",
+      "Отправьте `/cancel`, если захотите отменить сценарий.",
       "",
-      "Р’РІРµРґРёС‚Рµ Telegram ID РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
+      "Введите Telegram ID пользователя.",
     ].join("\n"),
     { parse_mode: "Markdown" },
   );
@@ -576,10 +576,10 @@ async function startUserInfoFlow(ctx: any, adminIdentity: { telegramId: string }
 
   await ctx.reply(
     [
-      "Р—Р°РїСѓСЃРєР°СЋ РїСЂРѕСЃРјРѕС‚СЂ РєР°СЂС‚РѕС‡РєРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
-      "РћС‚РїСЂР°РІСЊС‚Рµ `/cancel`, РµСЃР»Рё Р·Р°С…РѕС‚РёС‚Рµ РѕС‚РјРµРЅРёС‚СЊ СЃС†РµРЅР°СЂРёР№.",
+      "Запускаю просмотр карточки пользователя.",
+      "Отправьте `/cancel`, если захотите отменить сценарий.",
       "",
-      "Р’РІРµРґРёС‚Рµ Telegram ID РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
+      "Введите Telegram ID пользователя.",
     ].join("\n"),
     { parse_mode: "Markdown" },
   );
@@ -594,8 +594,8 @@ async function startBindClientFlow(ctx: any, adminIdentity: { telegramId: string
 
   await ctx.reply(
     [
-      "Р—Р°РїСѓСЃРєР°СЋ РїСЂРёРІСЏР·РєСѓ imported-РєР»РёРµРЅС‚Р° Рє СЂРµР°Р»СЊРЅРѕРјСѓ Telegram ID.",
-      "РћС‚РїСЂР°РІСЊС‚Рµ `/cancel`, РµСЃР»Рё Р·Р°С…РѕС‚РёС‚Рµ РѕС‚РјРµРЅРёС‚СЊ СЃС†РµРЅР°СЂРёР№.",
+      "Запускаю привязку imported-клиента к реальному Telegram ID.",
+      "Отправьте `/cancel`, если захотите отменить сценарий.",
       "",
       bindClientPrompts.telegramId,
     ].join("\n"),
@@ -621,10 +621,10 @@ async function handleAddUserState(ctx: any, admin: Awaited<ReturnType<typeof get
 
     await ctx.reply(
       [
-        `РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃРѕС…СЂР°РЅС‘РЅ: ${client.user.fullName}`,
+        `Пользователь сохранён: ${client.user.fullName}`,
         `Telegram ID: ${client.user.telegramId}`,
-        `РЎС‚Р°С‚СѓСЃ: ${client.status.toLowerCase()}`,
-        `Р”РѕСЃС‚СѓРї РґРѕ: ${formatDate(client.expiresAt)}`,
+        `Статус: ${client.status.toLowerCase()}`,
+        `Доступ до: ${formatDate(client.expiresAt)}`,
       ].join("\n"),
     );
     return true;
@@ -656,11 +656,11 @@ async function handleSetExpiryState(ctx: any, admin: Awaited<ReturnType<typeof g
   adminStates.delete(admin!.identity.telegramId);
 
   if (!client) {
-    await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+    await ctx.reply("Пользователь или VPN-клиент не найден.");
     return true;
   }
 
-  await ctx.reply(`РќРѕРІС‹Р№ СЃСЂРѕРє РґРµР№СЃС‚РІРёСЏ: ${formatDate(client.expiresAt)}.`);
+  await ctx.reply(`Новый срок действия: ${formatDate(client.expiresAt)}.`);
   return true;
 }
 
@@ -668,7 +668,7 @@ async function handleToggleState(ctx: any, admin: Awaited<ReturnType<typeof getA
   const telegramId = text.trim();
 
   if (!telegramId) {
-    await ctx.reply("Р’РІРµРґРёС‚Рµ Telegram ID РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+    await ctx.reply("Введите Telegram ID пользователя.");
     return true;
   }
 
@@ -680,11 +680,11 @@ async function handleToggleState(ctx: any, admin: Awaited<ReturnType<typeof getA
   adminStates.delete(admin!.identity.telegramId);
 
   if (!client) {
-    await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+    await ctx.reply("Пользователь или VPN-клиент не найден.");
     return true;
   }
 
-  await ctx.reply(`РЎС‚Р°С‚СѓСЃ РѕР±РЅРѕРІР»С‘РЅ: ${client.status.toLowerCase()}.`);
+  await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
   return true;
 }
 
@@ -692,7 +692,7 @@ async function handleUserInfoState(ctx: any, admin: Awaited<ReturnType<typeof ge
   const telegramId = text.trim();
 
   if (!telegramId) {
-    await ctx.reply("Р’РІРµРґРёС‚Рµ Telegram ID РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+    await ctx.reply("Введите Telegram ID пользователя.");
     return true;
   }
 
@@ -700,7 +700,7 @@ async function handleUserInfoState(ctx: any, admin: Awaited<ReturnType<typeof ge
   adminStates.delete(admin!.identity.telegramId);
 
   if (!user) {
-    await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+    await ctx.reply("Пользователь не найден.");
     return true;
   }
 
@@ -710,11 +710,11 @@ async function handleUserInfoState(ctx: any, admin: Awaited<ReturnType<typeof ge
   /*
   await ctx.reply(
     [
-      `РРјСЏ: ${user.fullName}`,
+      `Имя: ${user.fullName}`,
       `Telegram ID: ${user.telegramId}`,
       `Username: ${user.username ?? "-"}`,
-      `VPN СЃС‚Р°С‚СѓСЃ: ${user.vpnClient?.status.toLowerCase() ?? "РЅРµС‚ РєР»РёРµРЅС‚Р°"}`,
-      `Р”РѕСЃС‚СѓРї РґРѕ: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
+      `VPN статус: ${user.vpnClient?.status.toLowerCase() ?? "нет клиента"}`,
+      `Доступ до: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
     ].join("\n"),
   );
   */
@@ -725,7 +725,7 @@ async function handleBindClientState(ctx: any, admin: Awaited<ReturnType<typeof 
   const trimmed = text.trim();
 
   if (!trimmed) {
-    await ctx.reply("РџСѓСЃС‚РѕРµ Р·РЅР°С‡РµРЅРёРµ РЅРµ РїРѕРґС…РѕРґРёС‚. РџРѕРїСЂРѕР±СѓР№С‚Рµ РµС‰С‘ СЂР°Р·.");
+    await ctx.reply("Пустое значение не подходит. Попробуйте ещё раз.");
     return true;
   }
 
@@ -747,10 +747,10 @@ async function handleBindClientState(ctx: any, admin: Awaited<ReturnType<typeof 
   if (!result.ok) {
     const errorText =
       result.reason === "target_not_found"
-        ? "Р¦РµР»РµРІРѕР№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ. РџСѓСЃС‚СЊ РѕРЅ СЃРЅР°С‡Р°Р»Р° РЅР°РїРёС€РµС‚ Р±РѕС‚Сѓ /start."
+        ? "Целевой пользователь не найден. Пусть он сначала напишет боту /start."
         : result.reason === "target_already_has_client"
-          ? "РЈ СЌС‚РѕРіРѕ Telegram ID СѓР¶Рµ РµСЃС‚СЊ РїСЂРёРІСЏР·Р°РЅРЅС‹Р№ VPN-РєР»РёРµРЅС‚."
-          : "Imported-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ. РСЃРїРѕР»СЊР·СѓР№С‚Рµ email label, UUID РёР»Рё imported:... РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ.";
+          ? "У этого Telegram ID уже есть привязанный VPN-клиент."
+          : "Imported-клиент не найден. Используйте email label, UUID или imported:... идентификатор.";
 
     await ctx.reply(errorText);
     return true;
@@ -758,8 +758,8 @@ async function handleBindClientState(ctx: any, admin: Awaited<ReturnType<typeof 
 
   await ctx.reply(
     [
-      "РљР»РёРµРЅС‚ РїСЂРёРІСЏР·Р°РЅ.",
-      `РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ: ${result.client.user.fullName}`,
+      "Клиент привязан.",
+      `Пользователь: ${result.client.user.fullName}`,
       `Telegram ID: ${result.client.user.telegramId}`,
       `Email label: ${result.client.emailLabel}`,
       `UUID: ${result.client.uuid}`,
@@ -768,7 +768,7 @@ async function handleBindClientState(ctx: any, admin: Awaited<ReturnType<typeof 
 
   await ctx.api.sendMessage(
     result.client.user.telegramId,
-    "Р”РѕСЃС‚СѓРї РїСЂРёРІСЏР·Р°РЅ Рє РІР°С€РµРјСѓ Telegram-Р°РєРєР°СѓРЅС‚Сѓ. РћС‚РєСЂРѕР№С‚Рµ /start Рё РїРѕР»СѓС‡РёС‚Рµ СЃРІРѕР№ РєРѕРЅС„РёРі.",
+    "Доступ привязан к вашему Telegram-аккаунту. Откройте /start и получите свой конфиг.",
     { reply_markup: createMainMenuKeyboard() },
   );
 
@@ -797,12 +797,12 @@ async function handleAdminFlowMessage(ctx: any) {
   if (text.startsWith("/")) {
     if (text === "/cancel") {
       adminStates.delete(admin.identity.telegramId);
-      await ctx.reply("РЎС†РµРЅР°СЂРёР№ РѕС‚РјРµРЅС‘РЅ.");
+      await ctx.reply("Сценарий отменён.");
       return true;
     }
 
     await ctx.reply(
-      "РЎРµР№С‡Р°СЃ Р°РєС‚РёРІРµРЅ Р°РґРјРёРЅСЃРєРёР№ СЃС†РµРЅР°СЂРёР№. Р—Р°РІРµСЂС€РёС‚Рµ РµРіРѕ РёР»Рё РѕС‚РїСЂР°РІСЊС‚Рµ `/cancel`.",
+      "Сейчас активен админский сценарий. Завершите его или отправьте `/cancel`.",
       { parse_mode: "Markdown" },
     );
     return true;
@@ -872,10 +872,10 @@ export function registerAdminHandler(bot: TelegramBot) {
       if (!result.ok) {
         const errorText =
           result.reason === "target_not_found"
-            ? "Р¦РµР»РµРІРѕР№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ. РџСѓСЃС‚СЊ РѕРЅ СЃРЅР°С‡Р°Р»Р° РЅР°РїРёС€РµС‚ Р±РѕС‚Сѓ /start."
+            ? "Целевой пользователь не найден. Пусть он сначала напишет боту /start."
             : result.reason === "target_already_has_client"
-              ? "РЈ СЌС‚РѕРіРѕ Telegram ID СѓР¶Рµ РµСЃС‚СЊ РїСЂРёРІСЏР·Р°РЅРЅС‹Р№ VPN-РєР»РёРµРЅС‚."
-              : "Imported-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ. РСЃРїРѕР»СЊР·СѓР№С‚Рµ email label, UUID РёР»Рё imported:... РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ.";
+              ? "У этого Telegram ID уже есть привязанный VPN-клиент."
+              : "Imported-клиент не найден. Используйте email label, UUID или imported:... идентификатор.";
 
         await ctx.reply(errorText);
         return;
@@ -883,8 +883,8 @@ export function registerAdminHandler(bot: TelegramBot) {
 
       await ctx.reply(
         [
-          "РљР»РёРµРЅС‚ РїСЂРёРІСЏР·Р°РЅ.",
-          `РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ: ${result.client.user.fullName}`,
+          "Клиент привязан.",
+          `Пользователь: ${result.client.user.fullName}`,
           `Telegram ID: ${result.client.user.telegramId}`,
           `Email label: ${result.client.emailLabel}`,
           `UUID: ${result.client.uuid}`,
@@ -923,11 +923,11 @@ export function registerAdminHandler(bot: TelegramBot) {
       const client = await adminService.setExpiry(admin.adminUser.id, telegramId, parsed.value);
 
       if (!client) {
-        await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        await ctx.reply("Пользователь или VPN-клиент не найден.");
         return;
       }
 
-      await ctx.reply(`РќРѕРІС‹Р№ СЃСЂРѕРє РґРµР№СЃС‚РІРёСЏ: ${formatDate(client.expiresAt)}.`);
+      await ctx.reply(`Новый срок действия: ${formatDate(client.expiresAt)}.`);
       return;
     }
 
@@ -952,11 +952,11 @@ export function registerAdminHandler(bot: TelegramBot) {
       );
 
       if (!client) {
-        await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        await ctx.reply("Пользователь или VPN-клиент не найден.");
         return;
       }
 
-      await ctx.reply(`РЎС‚Р°С‚СѓСЃ РѕР±РЅРѕРІР»С‘РЅ: ${client.status.toLowerCase()}.`);
+      await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
       return;
     }
 
@@ -971,12 +971,12 @@ export function registerAdminHandler(bot: TelegramBot) {
     }
 
     if (!adminStates.has(admin.identity.telegramId)) {
-      await ctx.reply("РђРєС‚РёРІРЅРѕРіРѕ СЃС†РµРЅР°СЂРёСЏ СЃРµР№С‡Р°СЃ РЅРµС‚.");
+      await ctx.reply("Активного сценария сейчас нет.");
       return;
     }
 
     adminStates.delete(admin.identity.telegramId);
-    await ctx.reply("РЎС†РµРЅР°СЂРёР№ РѕС‚РјРµРЅС‘РЅ.");
+    await ctx.reply("Сценарий отменён.");
   });
 
   bot.command("listusers", async (ctx) => {
@@ -992,7 +992,7 @@ export function registerAdminHandler(bot: TelegramBot) {
     if (["all", "active", "expired", "disabled", "pending"].includes(filter)) {
       await sendFilteredUserList(ctx, filter);
       return;
-      await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»РµР№ РїРѕРєР° РЅРµС‚.");
+      await ctx.reply("Пользователей пока нет.");
       return;
     }
 
@@ -1030,7 +1030,7 @@ export function registerAdminHandler(bot: TelegramBot) {
     const user = await adminService.getUserInfo(telegramId);
 
     if (!user) {
-      await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+      await ctx.reply("Пользователь не найден.");
       return;
     }
 
@@ -1040,11 +1040,11 @@ export function registerAdminHandler(bot: TelegramBot) {
     /*
     await ctx.reply(
       [
-        `РРјСЏ: ${user.fullName}`,
+        `Имя: ${user.fullName}`,
         `Telegram ID: ${user.telegramId}`,
         `Username: ${user.username ?? "-"}`,
-        `VPN СЃС‚Р°С‚СѓСЃ: ${user.vpnClient?.status.toLowerCase() ?? "РЅРµС‚ РєР»РёРµРЅС‚Р°"}`,
-        `Р”РѕСЃС‚СѓРї РґРѕ: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
+        `VPN статус: ${user.vpnClient?.status.toLowerCase() ?? "нет клиента"}`,
+        `Доступ до: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
       ].join("\n"),
     );
     */
@@ -1078,7 +1078,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ Р·Р°СЏРІРєРё.");
+      await ctx.reply("Некорректный идентификатор заявки.");
       return;
     }
 
@@ -1092,23 +1092,23 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ Р·Р°СЏРІРєРё.");
+      await ctx.reply("Некорректный идентификатор заявки.");
       return;
     }
 
     const client = await adminService.approveRequest(admin.adminUser.id, requestId);
 
     if (!client) {
-      await ctx.reply("Р—Р°СЏРІРєР° РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅР°.");
+      await ctx.reply("Заявка не найдена или уже обработана.");
       return;
     }
 
     await ctx.reply(
       [
-        "Р—Р°СЏРІРєР° РѕРґРѕР±СЂРµРЅР°.",
-        `РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ: ${client.user.fullName}`,
+        "Заявка одобрена.",
+        `Пользователь: ${client.user.fullName}`,
         `Telegram ID: ${client.user.telegramId}`,
-        `Р”РѕСЃС‚СѓРї РґРѕ: ${formatDate(client.expiresAt)}`,
+        `Доступ до: ${formatDate(client.expiresAt)}`,
       ].join("\n"),
     );
 
@@ -1124,7 +1124,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ Р·Р°СЏРІРєРё.");
+      await ctx.reply("Некорректный идентификатор заявки.");
       return;
     }
 
@@ -1141,7 +1141,7 @@ export function registerAdminHandler(bot: TelegramBot) {
       const selection = parseBindSelection(ctx.match?.[1]);
 
       if (!selection) {
-        await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ imported-РєР»РёРµРЅС‚Р°.");
+        await ctx.reply("Некорректный выбор imported-клиента.");
         return;
       }
 
@@ -1154,10 +1154,10 @@ export function registerAdminHandler(bot: TelegramBot) {
       if (!result.ok) {
         const errorText =
           result.reason === "request_not_found"
-            ? "Р—Р°СЏРІРєР° РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅР°."
+            ? "Заявка не найдена или уже обработана."
             : result.reason === "target_already_has_client"
-              ? "РЈ Р°РІС‚РѕСЂР° Р·Р°СЏРІРєРё СѓР¶Рµ РµСЃС‚СЊ РїСЂРёРІСЏР·Р°РЅРЅС‹Р№ VPN-РєР»РёРµРЅС‚."
-              : "Imported-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.";
+              ? "У автора заявки уже есть привязанный VPN-клиент."
+              : "Imported-клиент не найден.";
 
         await ctx.reply(errorText);
         return;
@@ -1165,8 +1165,8 @@ export function registerAdminHandler(bot: TelegramBot) {
 
       await ctx.reply(
         [
-          "РЎСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ РєР»РёРµРЅС‚ РїСЂРёРІСЏР·Р°РЅ Рє Р·Р°СЏРІРєРµ.",
-          `РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ: ${result.client.user.fullName}`,
+          "Существующий клиент привязан к заявке.",
+          `Пользователь: ${result.client.user.fullName}`,
           `Telegram ID: ${result.client.user.telegramId}`,
           `Email label: ${result.client.emailLabel}`,
           `UUID: ${result.client.uuid}`,
@@ -1175,7 +1175,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
       await ctx.api.sendMessage(
         result.client.user.telegramId,
-        "Р”РѕСЃС‚СѓРї РїСЂРёРІСЏР·Р°РЅ Рє РІР°С€РµРјСѓ Telegram-Р°РєРєР°СѓРЅС‚Сѓ. РћС‚РєСЂРѕР№С‚Рµ /start Рё РїРѕР»СѓС‡РёС‚Рµ СЃРІРѕР№ РєРѕРЅС„РёРі.",
+        "Доступ привязан к вашему Telegram-аккаунту. Откройте /start и получите свой конфиг.",
         { reply_markup: createMainMenuKeyboard() },
       );
     },
@@ -1188,18 +1188,18 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ Р·Р°СЏРІРєРё.");
+      await ctx.reply("Некорректный идентификатор заявки.");
       return;
     }
 
     const request = await adminService.rejectRequest(admin.adminUser.id, requestId);
 
     if (!request) {
-      await ctx.reply("Р—Р°СЏРІРєР° РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅР°.");
+      await ctx.reply("Заявка не найдена или уже обработана.");
       return;
     }
 
-    await ctx.reply(`Р—Р°СЏРІРєР° #${request.id} РѕС‚РєР»РѕРЅРµРЅР°.`);
+    await ctx.reply(`Заявка #${request.id} отклонена.`);
 
     await ctx.api.sendMessage(request.user.telegramId, messages.requestRejected, {
       reply_markup: createContactKeyboard(),
@@ -1248,7 +1248,7 @@ export function registerAdminHandler(bot: TelegramBot) {
     return;
 
     if (users.length === 0) {
-      await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»РµР№ РїРѕРєР° РЅРµС‚.");
+      await ctx.reply("Пользователей пока нет.");
       return;
     }
 
@@ -1276,7 +1276,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const filter = ctx.match?.[1] as AdminUserFilter | undefined;
     if (!filter) {
-      await ctx.reply("Р СњР ВµР С”Р С•РЎР‚РЎР‚Р ВµР С”РЎвЂљР Р…РЎвЂ№Р в„– РЎвЂћР С‘Р В»РЎРЉРЎвЂљРЎР‚.");
+      await ctx.reply("Некорректный фильтр.");
       return;
     }
 
@@ -1290,7 +1290,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const filter = ctx.match?.[1] as Exclude<AdminUserFilter, "pending"> | undefined;
     if (!filter) {
-      await ctx.reply("Р СњР ВµР С”Р С•РЎР‚РЎР‚Р ВµР С”РЎвЂљР Р…РЎвЂ№Р в„– РЎвЂћР С‘Р В»РЎРЉРЎвЂљРЎР‚.");
+      await ctx.reply("Некорректный фильтр.");
       return;
     }
 
@@ -1304,13 +1304,13 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
     const user = await adminService.getUserInfo(telegramId);
     if (!user) {
-      await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+      await ctx.reply("Пользователь не найден.");
       return;
     }
 
@@ -1324,23 +1324,23 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
     const user = await adminService.getUserInfo(telegramId);
     if (!user) {
-      await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+      await ctx.reply("Пользователь не найден.");
       return;
     }
 
     await ctx.reply(
       [
-        `РРјСЏ: ${user.fullName}`,
+        `Имя: ${user.fullName}`,
         `Telegram ID: ${user.telegramId}`,
         `Username: ${user.username ?? "-"}`,
-        `VPN СЃС‚Р°С‚СѓСЃ: ${user.vpnClient?.status.toLowerCase() ?? "РЅРµС‚ РєР»РёРµРЅС‚Р°"}`,
-        `Р”РѕСЃС‚СѓРї РґРѕ: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
+        `VPN статус: ${user.vpnClient?.status.toLowerCase() ?? "нет клиента"}`,
+        `Доступ до: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
       ].join("\n"),
     );
   });
@@ -1352,7 +1352,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
@@ -1366,7 +1366,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
@@ -1380,7 +1380,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
@@ -1394,7 +1394,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
@@ -1408,7 +1408,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
@@ -1422,17 +1422,17 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
     const client = await adminService.setDisabled(admin.adminUser.id, telegramId, true);
     if (!client) {
-      await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+      await ctx.reply("Пользователь или VPN-клиент не найден.");
       return;
     }
 
-    await ctx.reply(`РЎС‚Р°С‚СѓСЃ РѕР±РЅРѕРІР»С‘РЅ: ${client.status.toLowerCase()}.`);
+    await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
   });
 
   bot.callbackQuery(new RegExp(`^${callbacks.adminPickEnablePrefix}(.+)$`), async (ctx) => {
@@ -1442,16 +1442,16 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const telegramId = ctx.match?.[1]?.trim();
     if (!telegramId) {
-      await ctx.reply("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+      await ctx.reply("Некорректный выбор пользователя.");
       return;
     }
 
     const client = await adminService.setDisabled(admin.adminUser.id, telegramId, false);
     if (!client) {
-      await ctx.reply("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР»Рё VPN-РєР»РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+      await ctx.reply("Пользователь или VPN-клиент не найден.");
       return;
     }
 
-    await ctx.reply(`РЎС‚Р°С‚СѓСЃ РѕР±РЅРѕРІР»С‘РЅ: ${client.status.toLowerCase()}.`);
+    await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
   });
 }

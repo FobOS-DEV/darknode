@@ -13,6 +13,14 @@ function send(res: ServerResponse, status: number, body: string, contentType = "
   res.end(body);
 }
 
+function buildUserInfoHeader(info: { uploadBytes: number; downloadBytes: number; expireUnix: number | null }): string {
+  const parts = [`upload=${info.uploadBytes}`, `download=${info.downloadBytes}`];
+  if (info.expireUnix !== null) {
+    parts.push(`expire=${info.expireUnix}`);
+  }
+  return parts.join("; ");
+}
+
 async function handleSubscription(token: string, res: ServerResponse) {
   const result = await subscriptionService.resolveByToken(token);
 
@@ -27,6 +35,7 @@ async function handleSubscription(token: string, res: ServerResponse) {
   }
 
   res.setHeader("Profile-Update-Interval", "12");
+  res.setHeader("Subscription-Userinfo", buildUserInfoHeader(result.userInfo));
   send(res, 200, result.content);
 }
 
