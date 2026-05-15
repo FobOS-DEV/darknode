@@ -28,4 +28,8 @@ export const callbacks = {
   adminRequestBindPrefix: "admin:request:bind:",
   adminRequestBindSelectPrefix: "admin:request:bindselect:",
   adminRequestRejectPrefix: "admin:request:reject:",
+  adminInbounds: "admin:inbounds",
+  adminInboundAdd: "admin:inbound:add",
+  adminInboundViewPrefix: "admin:inbound:view:",
+  adminInboundSetStatusPrefix: "admin:inbound:status:",
 } as const;

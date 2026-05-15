@@ -35,6 +35,7 @@ export function createAdminMenuKeyboard(): InlineKeyboard {
     .text("Отключить", callbacks.adminDisable)
     .text("Включить", callbacks.adminEnable)
     .row()
+    .text("Инбаунды", callbacks.adminInbounds)
     .text("Ручное добавление", callbacks.adminAddUser);
 }
 
