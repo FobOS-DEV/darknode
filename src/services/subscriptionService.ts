@@ -49,17 +49,16 @@ export type SubscriptionLookupResult =
       userInfo: SubscriptionUserInfo;
     };
 
-function slugifyLabel(value: string): string {
-  return value
-    .trim()
-    .replace(/\s+/g, "_")
-    .replace(/[^\p{L}\p{N}_-]/gu, "");
+function sanitizeForLabel(value: string): string {
+  // Trim and collapse whitespace; let URL-encoding handle everything else
+  // (including emoji like flag indicators).
+  return value.trim().replace(/\s+/g, " ");
 }
 
 function buildProfileLabel(client: VpnClientForProfile, inbound: InboundForProfile): string {
-  const base = slugifyLabel(client.displayName) || "vpn";
-  const suffix = slugifyLabel(inbound.label) || `inbound${inbound.id}`;
-  return encodeURIComponent(`${base}_${suffix}`);
+  const base = sanitizeForLabel(client.displayName) || "vpn";
+  const suffix = sanitizeForLabel(inbound.label) || `inbound${inbound.id}`;
+  return encodeURIComponent(`${suffix} — ${base}`);
 }
 
 function buildVlessUrl(client: VpnClientForProfile, inbound: InboundForProfile): string {

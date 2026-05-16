@@ -36,6 +36,15 @@ async function handleSubscription(token: string, res: ServerResponse) {
 
   res.setHeader("Profile-Update-Interval", "12");
   res.setHeader("Subscription-Userinfo", buildUserInfoHeader(result.userInfo));
+  if (env.subProfileTitle) {
+    // Hiddify reads Profile-Title; raw UTF-8 works with current clients.
+    // Encode as base64 with the RFC 8187 prefix for stricter implementations.
+    res.setHeader("Profile-Title", env.subProfileTitle);
+    res.setHeader(
+      "Profile-Title-Base64",
+      Buffer.from(env.subProfileTitle, "utf8").toString("base64"),
+    );
+  }
   send(res, 200, result.content);
 }
 

@@ -117,6 +117,7 @@ export const env = {
   subBaseUrl: getRequiredEnv("SUB_BASE_URL"),
   subHttpHost: getOptionalEnv("SUB_HTTP_HOST", "0.0.0.0"),
   subHttpPort: getOptionalNumberEnv("SUB_HTTP_PORT", 3001),
+  subProfileTitle: getOptionalNullableEnv("SUB_PROFILE_TITLE"),
   timezone: getOptionalEnv("TZ", "UTC"),
   supportLink: getRequiredEnv("SUPPORT_LINK"),
 };
