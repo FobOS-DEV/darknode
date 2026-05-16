@@ -55,10 +55,9 @@ function sanitizeForLabel(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
-function buildProfileLabel(client: VpnClientForProfile, inbound: InboundForProfile): string {
-  const base = sanitizeForLabel(client.displayName) || "vpn";
-  const suffix = sanitizeForLabel(inbound.label) || `inbound${inbound.id}`;
-  return encodeURIComponent(`${suffix} — ${base}`);
+function buildProfileLabel(_client: VpnClientForProfile, inbound: InboundForProfile): string {
+  const label = sanitizeForLabel(inbound.label) || `inbound${inbound.id}`;
+  return encodeURIComponent(label);
 }
 
 function buildVlessUrl(client: VpnClientForProfile, inbound: InboundForProfile): string {
