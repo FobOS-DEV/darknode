@@ -2,7 +2,7 @@
 	email {$SUB_TLS_EMAIL:admin@example.com}
 }
 
-{$SUB_DOMAIN} {
+{$SUB_DOMAIN}:8443 {
 	encode zstd gzip
 
 	@subscriptions path /sub/* /healthz
@@ -18,4 +18,10 @@
 		output stdout
 		format console
 	}
+}
+
+# Plain HTTP listener for ACME HTTP-01 challenge only; everything else
+# redirects to the HTTPS port above.
+http://{$SUB_DOMAIN} {
+	redir https://{host}:8443{uri}
 }
