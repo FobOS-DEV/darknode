@@ -3,14 +3,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { env } from "../config/env";
 import { logger } from "../config/logger";
 import { subscriptionService } from "../services/subscriptionService";
+import { apiRoutes } from "./apiRoutes";
+import { handlePreflight, sendText, setCors } from "./httpUtils";
 
 const SUB_PATH_PATTERN = /^\/sub\/([A-Za-z0-9_-]+)\/?$/;
 
 function send(res: ServerResponse, status: number, body: string, contentType = "text/plain; charset=utf-8") {
-  res.statusCode = status;
-  res.setHeader("Content-Type", contentType);
-  res.setHeader("Cache-Control", "no-store");
-  res.end(body);
+  sendText(res, status, body, contentType);
 }
 
 function buildUserInfoHeader(info: { uploadBytes: number; downloadBytes: number; expireUnix: number | null }): string {
@@ -52,20 +51,37 @@ async function handleSubscription(token: string, res: ServerResponse) {
 }
 
 function handleRequest(req: IncomingMessage, res: ServerResponse) {
+  setCors(req, res, env.siteOrigin);
+
+  if (req.method === "OPTIONS") {
+    handlePreflight(req, res, env.siteOrigin);
+    return;
+  }
+
+  const url = req.url ?? "/";
+  const path = url.split("?")[0]!;
+
+  if (path === "/healthz") {
+    send(res, 200, "ok");
+    return;
+  }
+
+  if (path.startsWith("/api/")) {
+    const handler = apiRoutes.match(req);
+    if (!handler) {
+      send(res, 404, JSON.stringify({ error: "not_found" }), "application/json; charset=utf-8");
+      return;
+    }
+    void apiRoutes.handle(handler, req, res);
+    return;
+  }
+
   if (req.method !== "GET" && req.method !== "HEAD") {
     send(res, 405, "method not allowed");
     return;
   }
 
-  const url = req.url ?? "/";
-
-  if (url === "/healthz") {
-    send(res, 200, "ok");
-    return;
-  }
-
-  const match = SUB_PATH_PATTERN.exec(url);
-
+  const match = SUB_PATH_PATTERN.exec(path);
   if (match) {
     handleSubscription(match[1], res).catch((error) => {
       logger.error({ error, token: match[1] }, "Subscription handler failed");

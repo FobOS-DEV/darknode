@@ -117,6 +117,11 @@ export const env = {
   subBaseUrl: getRequiredEnv("SUB_BASE_URL"),
   subHttpHost: getOptionalEnv("SUB_HTTP_HOST", "0.0.0.0"),
   subHttpPort: getOptionalNumberEnv("SUB_HTTP_PORT", 3001),
+  resendApiKey: getOptionalNullableEnv("RESEND_API_KEY"),
+  emailFrom: getOptionalNullableEnv("EMAIL_FROM"),
+  sessionTtlDays: getOptionalNumberEnv("SESSION_TTL_DAYS", 30),
+  verificationTtlMinutes: getOptionalNumberEnv("VERIFICATION_TTL_MINUTES", 15),
+  siteOrigin: getOptionalNullableEnv("SITE_ORIGIN"),
   subProfileTitle: (() => {
     const b64 = getOptionalNullableEnv("SUB_PROFILE_TITLE_BASE64");
     if (b64) {

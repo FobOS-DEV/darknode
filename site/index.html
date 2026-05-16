@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>DarkNode VPN — мобильный прототип</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="darknode.css">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: #050505;
+    font-family: 'JetBrains Mono', monospace;
+    color: #888;
+    overflow: hidden;
+  }
+  .stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse at 50% 30%, #131313 0%, #050505 60%);
+    overflow: hidden;
+  }
+  .stage::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(transparent 0, transparent 49%, rgba(0,255,136,0.018) 50%, transparent 51%, transparent 100%),
+      repeating-linear-gradient(0deg, transparent 0 22px, rgba(255,255,255,0.012) 22px 23px);
+    pointer-events: none;
+  }
+  .stage-chrome {
+    position: absolute; inset: 12px;
+    border: 1px dashed rgba(255,255,255,0.04);
+    pointer-events: none;
+  }
+  .stage-tag {
+    position: absolute;
+    color: rgba(255,255,255,0.18);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  .stage-tag-tl { top: 18px;    left: 22px; }
+  .stage-tag-tr { top: 18px;    right: 22px; }
+  .stage-tag-bl { bottom: 18px; left: 22px; }
+  .stage-tag-br { bottom: 18px; right: 22px; }
+  #root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
+  .device-fit {
+    transform-origin: center center;
+    will-change: transform;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="stage-chrome"></div>
+    <div class="stage-tag stage-tag-tl">CH·01 / PREVIEW</div>
+    <div class="stage-tag stage-tag-tr">DARKNODE · MOBILE</div>
+    <div class="stage-tag stage-tag-bl">14:02:09Z</div>
+    <div class="stage-tag stage-tag-br">REC ●</div>
+    <div id="root"></div>
+  </div>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="dn-api.js"></script>
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="darknode-ui.jsx"></script>
+  <script type="text/babel" src="darknode-screens.jsx"></script>
+
+  <script type="text/babel">
+    const { useState: useState_, useEffect: useEffect_, useMemo: useMemo_ } = React;
+
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "accent": "#00ff88",
+      "theme": "dark",
+      "density": "regular"
+    }/*EDITMODE-END*/;
+
+    const SCREENS = {
+      landing:   ScreenLanding,
+      register:  ScreenRegister,
+      login:     ScreenLogin,
+      verify:    ScreenVerify,
+      dashboard: ScreenDashboard,
+      vless:     ScreenVless,
+      plans:     ScreenPlans,
+      os:        ScreenOS,
+      app:       ScreenApp,
+      setup:     ScreenSetup,
+    };
+
+    // labels surfaced to comment system
+    const SCREEN_LABELS = {
+      landing:   '01 Landing',
+      register:  '02 Register',
+      login:     '03 Login',
+      verify:    '04 Verify',
+      dashboard: '05 Dashboard',
+      vless:     '06 VLESS / QR',
+      plans:     '07 Plans',
+      os:        '08 Setup · OS',
+      app:       '09 Setup · App',
+      setup:     '10 Setup · Steps',
+    };
+
+    function DarkNodeApp() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      const [screen, setScreen] = useState_('landing');
+      const [state, setState] = useState_({
+        email: '', plan: null, loggedIn: false, os: null, app: null,
+      });
+      const fitRef = React.useRef(null);
+
+      // auto-scale the device frame to fit the viewport, preserving 16px gutter
+      useEffect_(() => {
+        const fit = () => {
+          const el = fitRef.current;
+          if (!el) return;
+          const margin = 24;
+          const sx = (window.innerWidth  - margin * 2) / 402;
+          const sy = (window.innerHeight - margin * 2) / 874;
+          const s = Math.min(1, sx, sy);
+          el.style.transform = `scale(${s})`;
+        };
+        fit();
+        window.addEventListener('resize', fit);
+        return () => window.removeEventListener('resize', fit);
+      }, []);
+
+      const go = (name) => {
+        const el = document.querySelector('.dn-scroll');
+        if (el) el.scrollTop = 0;
+        setScreen(name);
+      };
+
+      const Screen = SCREENS[screen] || ScreenLanding;
+
+      // Inject the accent into CSS var
+      const cssVars = {
+        '--dn-accent': t.accent || '#00ff88',
+      };
+
+      return (
+        <React.Fragment>
+          <div className="device-fit" ref={fitRef}>
+          <IOSDevice width={402} height={874} dark={t.theme === 'dark'}>
+            <div
+              className="dn-app"
+              data-theme={t.theme}
+              data-density={t.density}
+              data-screen-label={SCREEN_LABELS[screen]}
+              style={cssVars}
+            >
+              <div className="dn-scroll">
+                <Screen go={go} state={state} setState={setState} />
+              </div>
+            </div>
+          </IOSDevice>
+          </div>
+
+          <TweaksPanel title="Tweaks">
+            <TweakSection label="Тема" />
+            <TweakRadio
+              label="Тема"
+              value={t.theme}
+              options={[
+                { value: 'dark',  label: 'Тёмная' },
+                { value: 'light', label: 'Светлая' },
+              ]}
+              onChange={(v) => setTweak('theme', v)}
+            />
+
+            <TweakSection label="Акцентный цвет" />
+            <TweakColor
+              label="Акцент"
+              value={t.accent}
+              options={['#00ff88', '#ffb800', '#ff3355', '#5fb3ff', '#e8e8e8']}
+              onChange={(v) => setTweak('accent', v)}
+            />
+
+            <TweakSection label="Плотность" />
+            <TweakRadio
+              label="Плотность"
+              value={t.density}
+              options={[
+                { value: 'compact', label: 'Compact' },
+                { value: 'regular', label: 'Regular' },
+                { value: 'comfy',   label: 'Comfy' },
+              ]}
+              onChange={(v) => setTweak('density', v)}
+            />
+
+            <TweakSection label="Навигация" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+              {Object.keys(SCREENS).map((s) => (
+                <TweakButton
+                  key={s}
+                  label={SCREEN_LABELS[s].replace(/^\d+\s/, '')}
+                  active={screen === s}
+                  onClick={() => go(s)}
+                />
+              ))}
+            </div>
+          </TweaksPanel>
+        </React.Fragment>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<DarkNodeApp />);
+  </script>
+</body>
+</html>

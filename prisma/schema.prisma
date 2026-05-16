@@ -8,22 +8,55 @@ datasource db {
 }
 
 model User {
-  id             Int             @id @default(autoincrement())
-  telegramId     String          @unique
-  username       String?
-  firstName      String?
-  lastName       String?
-  fullName       String
-  isAdmin        Boolean         @default(false)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  vpnClient      VpnClient?
-  subscription   Subscription?
-  inboundAccess  InboundUser[]
-  accessRequests AccessRequest[]
-  auditLogs      AuditLog[]      @relation("actorAuditLogs")
-  targetedBy     AuditLog[]      @relation("targetAuditLogs")
+  id              Int             @id @default(autoincrement())
+  telegramId      String          @unique
+  username        String?
+  firstName       String?
+  lastName        String?
+  fullName        String
+  isAdmin         Boolean         @default(false)
+  email           String?         @unique
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  source          String          @default("telegram")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  vpnClient       VpnClient?
+  subscription    Subscription?
+  inboundAccess   InboundUser[]
+  emailVerifications EmailVerification[]
+  sessions        Session[]
+  accessRequests  AccessRequest[]
+  auditLogs       AuditLog[]      @relation("actorAuditLogs")
+  targetedBy      AuditLog[]      @relation("targetAuditLogs")
   trafficSnapshots TrafficSnapshot[]
+}
+
+model EmailVerification {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  code        String
+  purpose     String    @default("register")
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+}
+
+model Session {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  token       String    @unique
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  lastSeenAt  DateTime?
+  userAgent   String?
+  ip          String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Inbound {
