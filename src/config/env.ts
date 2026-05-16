@@ -117,7 +117,17 @@ export const env = {
   subBaseUrl: getRequiredEnv("SUB_BASE_URL"),
   subHttpHost: getOptionalEnv("SUB_HTTP_HOST", "0.0.0.0"),
   subHttpPort: getOptionalNumberEnv("SUB_HTTP_PORT", 3001),
-  subProfileTitle: getOptionalNullableEnv("SUB_PROFILE_TITLE"),
+  subProfileTitle: (() => {
+    const b64 = getOptionalNullableEnv("SUB_PROFILE_TITLE_BASE64");
+    if (b64) {
+      try {
+        return Buffer.from(b64, "base64").toString("utf8");
+      } catch {
+        return null;
+      }
+    }
+    return getOptionalNullableEnv("SUB_PROFILE_TITLE");
+  })(),
   timezone: getOptionalEnv("TZ", "UTC"),
   supportLink: getRequiredEnv("SUPPORT_LINK"),
 };
