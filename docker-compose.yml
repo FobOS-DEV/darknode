@@ -46,7 +46,7 @@ services:
       - .env
     ports:
       - "80:80"
-      - "8443:8443"
+      - "9443:9443"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
