@@ -37,13 +37,16 @@ async function handleSubscription(token: string, res: ServerResponse) {
   res.setHeader("Profile-Update-Interval", "12");
   res.setHeader("Subscription-Userinfo", buildUserInfoHeader(result.userInfo));
   if (env.subProfileTitle) {
-    // Hiddify reads Profile-Title; raw UTF-8 works with current clients.
-    // Encode as base64 with the RFC 8187 prefix for stricter implementations.
-    res.setHeader("Profile-Title", env.subProfileTitle);
-    res.setHeader(
-      "Profile-Title-Base64",
-      Buffer.from(env.subProfileTitle, "utf8").toString("base64"),
-    );
+    const title = env.subProfileTitle;
+    const base64 = Buffer.from(title, "utf8").toString("base64");
+    // Node's HTTP layer rejects non-ASCII bytes in header values, so we
+    // either send the raw title (if pure ASCII) or Hiddify's `base64:`
+    // prefix form. A Profile-Title-Base64 companion header covers clients
+    // that look there explicitly.
+    // eslint-disable-next-line no-control-regex
+    const isAscii = /^[\x20-\x7e]*$/.test(title);
+    res.setHeader("Profile-Title", isAscii ? title : `base64:${base64}`);
+    res.setHeader("Profile-Title-Base64", base64);
   }
   send(res, 200, result.content);
 }
