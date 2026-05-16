@@ -29,14 +29,18 @@ export function registerStartHandler(bot: TelegramBot) {
       return;
     }
 
-    await ctx.reply(
-      access.kind === "not_found" ? messages.noAccess : messages.inactiveAccess,
-      {
-        reply_markup:
-          access.kind === "not_found"
-            ? createRequestAccessKeyboard()
-            : createContactKeyboard(),
-      },
-    );
+    if (access.kind === "not_found") {
+      await ctx.reply(
+        "Для получения доступа к VPN свяжитесь с администратором @Neshchadin",
+        {
+          reply_markup: createRequestAccessKeyboard(),
+        },
+      );
+      return;
+    }
+
+    await ctx.reply(messages.inactiveAccess, {
+      reply_markup: createContactKeyboard(),
+    });
   });
 }

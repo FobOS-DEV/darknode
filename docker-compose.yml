@@ -1,11 +1,30 @@
 services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vpn-telegram-bot
+    container_name: vpn-telegram-migrate
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: file:/app/prisma/dev.db
+    working_dir: /app
+    command: ["npx", "prisma", "migrate", "deploy"]
+    volumes:
+      - ./prisma:/app/prisma
   bot:
     build:
       context: .
       dockerfile: Dockerfile
+    image: vpn-telegram-bot
     container_name: vpn-telegram-bot
     init: true
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
@@ -36,12 +55,13 @@ services:
     depends_on:
       - bot
   reminders:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: vpn-telegram-bot
     container_name: vpn-telegram-reminders
     init: true
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
@@ -57,13 +77,37 @@ services:
     volumes:
       - ./backups:/app/backups
       - ./prisma:/app/prisma
+  expiry-sweep:
+    image: vpn-telegram-bot
+    container_name: vpn-telegram-expiry-sweep
+    init: true
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: file:/app/prisma/dev.db
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    stop_grace_period: 20s
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - while true; do npm run expiry:sweep; sleep "${EXPIRY_SWEEP_INTERVAL_SECONDS:-1800}"; done
+    volumes:
+      - ./backups:/app/backups
+      - ./prisma:/app/prisma
   traffic-snapshots:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: vpn-telegram-bot
     container_name: vpn-telegram-traffic-snapshots
     init: true
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:

@@ -94,20 +94,6 @@ function runSshCommand(command: string): Promise<string> {
   });
 }
 
-function extractTrafficStats(items: XrayStatItem[], emailLabel: string): UserTrafficStats {
-  const uplinkName = `user>>>${emailLabel}>>>traffic>>>uplink`;
-  const downlinkName = `user>>>${emailLabel}>>>traffic>>>downlink`;
-
-  const uplinkBytes = items.find((item) => item.name === uplinkName)?.value ?? 0;
-  const downlinkBytes = items.find((item) => item.name === downlinkName)?.value ?? 0;
-
-  return {
-    uplinkBytes,
-    downlinkBytes,
-    totalBytes: uplinkBytes + downlinkBytes,
-  };
-}
-
 function extractAllTrafficStats(items: XrayStatItem[]): UserTrafficStatsMap {
   const statsByUser: UserTrafficStatsMap = {};
 

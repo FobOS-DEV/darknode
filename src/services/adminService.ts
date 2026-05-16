@@ -6,13 +6,31 @@ import { userService } from "./userService";
 import { vpnGeneratorService } from "./vpnGeneratorService";
 import { xraySyncService } from "./xraySyncService";
 import { prisma } from "../db/prisma";
+import { randomUUID } from "node:crypto";
+
+function slugifyQuickLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}_-]/gu, "") || "manual";
+}
+
+function buildPlaceholderWhere() {
+  return {
+    OR: [
+      { telegramId: { startsWith: "imported:" } },
+      { telegramId: { startsWith: "manual:" } },
+    ],
+  };
+}
 
 const VPN_STATUS = {
   ACTIVE: "ACTIVE" as const,
   DISABLED: "DISABLED" as const,
 };
 
-export type AdminUserFilter = "all" | "active" | "expired" | "disabled" | "pending";
+export type AdminUserFilter = "all" | "active" | "expired" | "disabled" | "pending" | "manual" | "no_traffic";
 
 export const adminService = {
   async addOrUpdateUser(actorUserId: number, input: VpnClientInput) {
@@ -59,6 +77,62 @@ export const adminService = {
     }
 
     return client;
+  },
+
+  async deleteClient(actorUserId: number, telegramId: string) {
+    const user = await prisma.user.findUnique({
+      where: { telegramId },
+      include: {
+        vpnClient: true,
+        accessRequests: true,
+      },
+    });
+
+    if (!user?.vpnClient) {
+      return null;
+    }
+
+    const shouldDeleteUser =
+      (user.telegramId.startsWith("manual:") || user.telegramId.startsWith("imported:")) &&
+      !user.isAdmin &&
+      user.accessRequests.length === 0;
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      const deletedClient = await tx.vpnClient.delete({
+        where: { id: user.vpnClient!.id },
+      });
+
+      if (shouldDeleteUser) {
+        await tx.user.delete({
+          where: { id: user.id },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          action: "admin.delete_client",
+          actorUserId,
+          targetUserId: shouldDeleteUser ? null : user.id,
+          payloadJson: JSON.stringify({
+            telegramId: user.telegramId,
+            fullName: user.fullName,
+            uuid: deletedClient.uuid,
+            emailLabel: deletedClient.emailLabel,
+            deletedUser: shouldDeleteUser,
+          }),
+        },
+      });
+
+      return {
+        deletedClient,
+        deletedUser: shouldDeleteUser,
+        user,
+      };
+    });
+
+    await xraySyncService.syncAuthorizedClients();
+
+    return deleted;
   },
 
   async listUsers(filter: AdminUserFilter = "all") {
@@ -129,6 +203,44 @@ export const adminService = {
       });
     }
 
+    if (filter === "manual") {
+      return prisma.user.findMany({
+        where: {
+          telegramId: {
+            startsWith: "manual:",
+          },
+          vpnClient: {
+            isNot: null,
+          },
+        },
+        include: { vpnClient: true },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
+    if (filter === "no_traffic") {
+      const users = await prisma.user.findMany({
+        where: {
+          vpnClient: {
+            isNot: null,
+          },
+        },
+        include: {
+          vpnClient: true,
+          trafficSnapshots: {
+            orderBy: { capturedAt: "desc" },
+            take: 1,
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      return users.filter((user) => {
+        const latestSnapshot = user.trafficSnapshots[0];
+        return !latestSnapshot || latestSnapshot.totalBytes <= 0;
+      });
+    }
+
     return vpnService.listUsersWithClients();
   },
 
@@ -139,9 +251,7 @@ export const adminService = {
   async listImportedClients() {
     return prisma.user.findMany({
       where: {
-        telegramId: {
-          startsWith: "imported:",
-        },
+        ...buildPlaceholderWhere(),
         vpnClient: {
           isNot: null,
         },
@@ -157,6 +267,13 @@ export const adminService = {
 
   async getUserInfo(telegramId: string) {
     return vpnService.getUserInfo(telegramId);
+  },
+
+  async getUserInfoById(id: number) {
+    return prisma.user.findUnique({
+      where: { id },
+      include: { vpnClient: true },
+    });
   },
 
   async bindImportedClient(actorUserId: number, targetTelegramId: string, lookup: string) {
@@ -177,9 +294,7 @@ export const adminService = {
 
     const importedUser = await prisma.user.findFirst({
       where: {
-        telegramId: {
-          startsWith: "imported:",
-        },
+        ...buildPlaceholderWhere(),
         vpnClient: {
           isNot: null,
         },
@@ -246,9 +361,7 @@ export const adminService = {
     const importedUser = await prisma.user.findFirst({
       where: {
         id: importedUserId,
-        telegramId: {
-          startsWith: "imported:",
-        },
+        ...buildPlaceholderWhere(),
         vpnClient: {
           isNot: null,
         },
@@ -328,6 +441,32 @@ export const adminService = {
       telegramId: request.user.telegramId,
       expiresAt: client.expiresAt?.toISOString() ?? null,
     });
+
+    return client;
+  },
+
+  async createQuickConfig(actorUserId: number, fullName: string) {
+    const normalizedName = fullName.trim();
+    const suffix = randomUUID().slice(0, 8);
+    const telegramId = `manual:${slugifyQuickLabel(normalizedName)}:${suffix}`;
+
+    const generatedClient = vpnGeneratorService.generateForUser({
+      telegramId,
+      fullName: normalizedName,
+    });
+
+    const client = await vpnService.upsertVpnClient({
+      ...generatedClient,
+      displayName: normalizedName,
+      emailLabel: `manual-${suffix}`,
+    });
+
+    await auditService.log("admin.create_quick_config", actorUserId, client.user.id, {
+      telegramId,
+      fullName: normalizedName,
+      expiresAt: client.expiresAt?.toISOString() ?? null,
+    });
+    await xraySyncService.syncAuthorizedClients();
 
     return client;
   },

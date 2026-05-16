@@ -19,6 +19,7 @@ model User {
   updatedAt      DateTime        @updatedAt
   vpnClient      VpnClient?
   subscription   Subscription?
+  inboundAccess  InboundUser[]
   accessRequests AccessRequest[]
   auditLogs      AuditLog[]      @relation("actorAuditLogs")
   targetedBy     AuditLog[]      @relation("targetAuditLogs")
@@ -45,8 +46,20 @@ model Inbound {
   updatedAt       DateTime  @updatedAt
   deprecatedAt    DateTime?
   vpnClients      VpnClient[]
+  visibility      InboundUser[]
 
   @@index([status, priority])
+}
+
+model InboundUser {
+  inboundId  Int
+  userId     Int
+  createdAt  DateTime @default(now())
+  inbound    Inbound  @relation(fields: [inboundId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([inboundId, userId])
+  @@index([userId])
 }
 
 model VpnClient {
@@ -109,13 +122,20 @@ model AccessRequest {
   @@index([status, createdAt])
 }
 
+model AdminState {
+  id         Int      @id @default(autoincrement())
+  telegramId String   @unique
+  payload    String
+  updatedAt  DateTime @updatedAt
+}
+
 model TrafficSnapshot {
   id            Int      @id @default(autoincrement())
   userId        Int
   vpnClientId   Int
-  uplinkBytes   Int
-  downlinkBytes Int
-  totalBytes    Int
+  uplinkBytes   BigInt
+  downlinkBytes BigInt
+  totalBytes    BigInt
   capturedAt    DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   vpnClient     VpnClient @relation(fields: [vpnClientId], references: [id], onDelete: Cascade)

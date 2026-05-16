@@ -1,11 +1,24 @@
-﻿import { callbacks } from "../../constants/callbacks";
+import { InputFile } from "grammy";
+
+import { adminMessages } from "../../constants/adminMessages";
+import { callbacks } from "../../constants/callbacks";
 import { messages } from "../../constants/messages";
 import { adminService, type AdminUserFilter } from "../../services/adminService";
+import { adminStateService } from "../../services/adminStateService";
 import { requestService } from "../../services/requestService";
+import { logger } from "../../config/logger";
+import { qrCodeService } from "../../services/qrCodeService";
 import { trafficSnapshotService } from "../../services/trafficSnapshotService";
+import { userService } from "../../services/userService";
+import {
+  generateManualPlaceholderTelegramId,
+  vpnGeneratorService,
+} from "../../services/vpnGeneratorService";
+import { xrayAccessLogService } from "../../services/xrayAccessLogService";
 import { xrayStatsService } from "../../services/xrayStatsService";
+import { env } from "../../config/env";
 import type { VpnClientInput } from "../../services/vpnService";
-import { TelegramBot } from "../../types/bot";
+import { BotContext, TelegramBot } from "../../types/bot";
 import { isAdminTelegramId } from "../../utils/auth";
 import { formatDate } from "../../utils/dates";
 import {
@@ -16,9 +29,8 @@ import {
   createPendingRequestsKeyboard,
   createRequestDecisionKeyboard,
   createUserPickerKeyboard,
-  formatFilterLabel,
 } from "../keyboards/adminMenu";
-import { createContactKeyboard, createMainMenuKeyboard } from "../keyboards/mainMenu";
+import { createMainMenuKeyboard } from "../keyboards/mainMenu";
 import { getTelegramIdentity } from "./shared";
 
 type AddUserField =
@@ -69,10 +81,6 @@ type ToggleState = {
   kind: "disable" | "enable";
 };
 
-type UserInfoState = {
-  kind: "userinfo";
-};
-
 type BindClientField = "telegramId" | "lookup";
 type BindClientState = {
   kind: "bindclient";
@@ -80,11 +88,40 @@ type BindClientState = {
   draft: { telegramId?: string };
 };
 
-type AdminState = AddUserState | SetExpiryState | ToggleState | UserInfoState | BindClientState;
+type GenerateUserField = "fullName" | "telegramId" | "expiresAt";
+type GenerateUserDraft = {
+  fullName?: string;
+  telegramId?: string;
+  expiresAt?: Date | null;
+};
+type GenerateUserState = {
+  kind: "generateuser";
+  step: GenerateUserField;
+  draft: GenerateUserDraft;
+};
+
+const generateUserFieldOrder: GenerateUserField[] = ["fullName", "telegramId", "expiresAt"];
+
+const generateUserPrompts: Record<GenerateUserField, string> = {
+  fullName: adminMessages.enterFullName,
+  telegramId: adminMessages.enterTelegramIdOptional,
+  expiresAt: adminMessages.enterExpiryShort,
+};
+
+type AdminIdentity = {
+  identity: NonNullable<ReturnType<typeof getTelegramIdentity>>;
+  adminUser: { id: number };
+};
+
+type ImportedListUser = {
+  fullName: string;
+  telegramId: string;
+  vpnClient: { status: string } | null;
+};
 
 const addUserFieldOrder: AddUserField[] = [
-  "telegramId",
   "fullName",
+  "telegramId",
   "displayName",
   "emailLabel",
   "uuid",
@@ -98,33 +135,34 @@ const addUserFieldOrder: AddUserField[] = [
   "expiresAt",
 ];
 
+const AUTO_TELEGRAM_ID_MARKER = "__autogen__";
+
 const addUserPrompts: Record<AddUserField, string> = {
-  telegramId: "Введите Telegram ID пользователя.",
-  fullName: "Введите полное имя пользователя.",
-  displayName: "Введите display name для VPN-клиента.",
-  emailLabel: "Введите email label.",
-  uuid: "Введите UUID клиента.",
-  vlessUrl: "Вставьте полный VLESS URL.",
-  server: "Введите адрес сервера.",
-  port: "Введите порт, например 443.",
-  publicKey: "Введите public key.",
-  shortId: "Введите short id.",
-  sni: "Введите SNI.",
-  flow: "Введите flow, например xtls-rprx-vision.",
-  expiresAt: "Введите дату окончания в формате YYYY-MM-DD или `none`.",
+  telegramId: adminMessages.enterTelegramIdOptional,
+  fullName: adminMessages.enterFullName,
+  displayName: adminMessages.enterDisplayName,
+  emailLabel: adminMessages.enterEmailLabel,
+  uuid: adminMessages.enterUuid,
+  vlessUrl: adminMessages.enterVlessUrl,
+  server: adminMessages.enterServer,
+  port: adminMessages.enterPort,
+  publicKey: adminMessages.enterPublicKey,
+  shortId: adminMessages.enterShortId,
+  sni: adminMessages.enterSni,
+  flow: adminMessages.enterFlow,
+  expiresAt: adminMessages.enterExpiry,
 };
 
 const setExpiryPrompts: Record<SetExpiryField, string> = {
-  telegramId: "Введите Telegram ID пользователя.",
-  expiresAt: "Введите новую дату окончания в формате YYYY-MM-DD или `none`.",
+  telegramId: adminMessages.enterTelegramId,
+  expiresAt: adminMessages.enterExpiry,
 };
 
 const bindClientPrompts: Record<BindClientField, string> = {
-  telegramId: "Введите Telegram ID пользователя, к которому нужно привязать существующий клиент.",
-  lookup: "Введите email label, UUID или imported:... идентификатор клиента.",
+  telegramId: adminMessages.enterBindTarget,
+  lookup: adminMessages.enterBindLookup,
 };
 
-const adminStates = new Map<string, AdminState>();
 
 function parseCommandArgs(text: string | undefined): string[] {
   if (!text) {
@@ -143,7 +181,7 @@ function parseExpiryValue(value: string): { ok: true; value: Date | null } | { o
   const trimmed = value.trim();
 
   if (!trimmed) {
-    return { ok: false, error: "Пустое значение не подходит. Попробуйте ещё раз." };
+    return { ok: false, error: adminMessages.emptyValue };
   }
 
   if (trimmed.toLowerCase() === "none") {
@@ -153,7 +191,7 @@ function parseExpiryValue(value: string): { ok: true; value: Date | null } | { o
   const expiresAt = new Date(trimmed);
 
   if (Number.isNaN(expiresAt.getTime())) {
-    return { ok: false, error: "Некорректная дата. Используйте формат YYYY-MM-DD или `none`." };
+    return { ok: false, error: adminMessages.invalidDate };
   }
 
   return { ok: true, value: expiresAt };
@@ -166,14 +204,14 @@ function parseAddUserValue(
   const trimmed = value.trim();
 
   if (!trimmed) {
-    return { ok: false, error: "Пустое значение не подходит. Попробуйте ещё раз." };
+    return { ok: false, error: adminMessages.emptyValue };
   }
 
   if (step === "port") {
     const port = Number(trimmed);
 
     if (!Number.isInteger(port)) {
-      return { ok: false, error: "Порт должен быть целым числом." };
+      return { ok: false, error: adminMessages.invalidPort };
     }
 
     return { ok: true, value: port };
@@ -183,12 +221,25 @@ function parseAddUserValue(
     return parseExpiryValue(trimmed);
   }
 
+  if (step === "telegramId") {
+    const lower = trimmed.toLowerCase();
+    if (lower === "none" || lower === "-") {
+      return { ok: true, value: AUTO_TELEGRAM_ID_MARKER };
+    }
+    return { ok: true, value: trimmed };
+  }
+
   return { ok: true, value: trimmed };
 }
 
 function buildAddUserInput(draft: AddUserDraft): VpnClientInput {
+  const telegramId =
+    draft.telegramId === AUTO_TELEGRAM_ID_MARKER
+      ? generateManualPlaceholderTelegramId(draft.fullName)
+      : draft.telegramId!;
+
   return {
-    telegramId: draft.telegramId!,
+    telegramId,
     fullName: draft.fullName!,
     displayName: draft.displayName!,
     emailLabel: draft.emailLabel!,
@@ -204,7 +255,7 @@ function buildAddUserInput(draft: AddUserDraft): VpnClientInput {
   };
 }
 
-async function getAdminIdentity(ctx: any) {
+async function getAdminIdentity(ctx: BotContext): Promise<AdminIdentity | null> {
   const identity = getTelegramIdentity(ctx);
 
   if (!identity) {
@@ -226,43 +277,30 @@ async function getAdminIdentity(ctx: any) {
   return { identity, adminUser };
 }
 
-async function sendAdminMenu(ctx: any) {
-  await ctx.reply(
-    [
-      "Админ-команды:",
-      "/requests - список новых заявок",
-      "/imported - список импортированных клиентов",
-      "/bindclient - привязать imported-клиента к реальному Telegram ID",
-      "/adduser - ручное добавление пользователя",
-      "/setexpiry - изменить срок действия",
-      "/disable - отключить пользователя",
-      "/enable - включить пользователя",
-      "/listusers - все пользователи",
-      "/userinfo <telegram_id> - карточка пользователя",
-      "/cancel - отменить активный сценарий",
-    ].join("\n"),
-    { reply_markup: createAdminMenuKeyboard() },
-  );
+async function sendAdminMenu(ctx: BotContext) {
+  await ctx.reply([adminMessages.menuHeader, ...adminMessages.menuLines].join("\n"), {
+    reply_markup: createAdminMenuKeyboard(),
+  });
 }
 
-async function sendPendingRequests(ctx: any) {
+async function sendPendingRequests(ctx: BotContext) {
   const requests = await adminService.listPendingRequests();
 
   if (requests.length === 0) {
-    await ctx.reply("Новых заявок сейчас нет.");
+    await ctx.reply(adminMessages.noPendingRequests);
     return;
   }
 
-  await ctx.reply("Новые заявки:", {
+  await ctx.reply(adminMessages.pendingRequestsHeader, {
     reply_markup: createPendingRequestsKeyboard(requests),
   });
 }
 
-async function sendImportedClients(ctx: any) {
+async function sendImportedClients(ctx: BotContext) {
   const importedClients = await adminService.listImportedClients();
 
   if (importedClients.length === 0) {
-    await ctx.reply("Свободных imported-клиентов сейчас нет.");
+    await ctx.reply(adminMessages.noImportedClients);
     return;
   }
 
@@ -277,67 +315,67 @@ async function sendImportedClients(ctx: any) {
   );
 }
 
-async function sendImportedClientsForRequest(ctx: any, requestId: number) {
+async function sendImportedClientsForRequest(ctx: BotContext, requestId: number) {
   const request = await requestService.getRequestById(requestId);
 
   if (!request || request.status !== "PENDING") {
-    await ctx.reply("Заявка не найдена или уже обработана.");
+    await ctx.reply(adminMessages.requestAlreadyHandled);
     return;
   }
 
   const importedClients = await adminService.listImportedClients();
 
   if (importedClients.length === 0) {
-    await ctx.reply("Свободных imported-клиентов сейчас нет.");
+    await ctx.reply(adminMessages.noImportedClients);
     return;
   }
 
-  await ctx.reply(
-    `Выберите существующий клиент для заявки #${requestId}:`,
-    {
-      reply_markup: createImportedClientsForRequestKeyboard(requestId, importedClients),
-    },
-  );
+  await ctx.reply(adminMessages.pickImportedForRequest(requestId), {
+    reply_markup: createImportedClientsForRequestKeyboard(requestId, importedClients),
+  });
 }
 
+type UserPickerAction = "userinfo" | "setexpiry" | "disable" | "enable";
+
 async function sendUserPicker(
-  ctx: any,
-  action: "userinfo" | "setexpiry" | "disable" | "enable",
+  ctx: BotContext,
+  action: UserPickerAction,
   filter: Exclude<AdminUserFilter, "pending"> = "all",
+  page = 0,
 ) {
   const users = await adminService.listUsers(filter);
 
   if (users.length === 0) {
-    await ctx.reply("Пользователей пока нет.");
+    await ctx.reply(adminMessages.noUsers);
     return;
   }
 
   const title =
     action === "userinfo"
-      ? "Выберите пользователя для карточки:"
+      ? adminMessages.pickUserForCard
       : action === "setexpiry"
-        ? "Выберите пользователя для изменения срока:"
+        ? adminMessages.pickUserForExpiry
         : action === "disable"
-          ? "Выберите пользователя для отключения:"
-          : "Выберите пользователя для включения:";
+          ? adminMessages.pickUserForDisable
+          : adminMessages.pickUserForEnable;
 
   await ctx.reply(title, {
-    reply_markup: createUserPickerKeyboard(action, users),
+    reply_markup: createUserPickerKeyboard(action, users, filter, page),
   });
 }
 
-async function sendUserFilterPicker(ctx: any, action: "userinfo" | "listusers") {
+async function sendUserFilterPicker(ctx: BotContext, action: "userinfo" | "listusers") {
   const title =
     action === "userinfo"
-      ? "Выберите фильтр для карточки пользователя:"
-      : "Выберите фильтр для списка пользователей:";
+      ? adminMessages.pickFilterForCard
+      : adminMessages.pickFilterForList;
 
   await ctx.reply(title, {
     reply_markup: createUserFilterKeyboard(action),
   });
 }
 
-async function sendFilteredUserList(ctx: any, filter: AdminUserFilter) {
+async function sendFilteredUserList(ctx: BotContext, filter: AdminUserFilter) {
   if (filter === "pending") {
     await sendPendingRequests(ctx);
     return;
@@ -346,16 +384,16 @@ async function sendFilteredUserList(ctx: any, filter: AdminUserFilter) {
   const users = await adminService.listUsers(filter);
 
   if (users.length === 0) {
-    await ctx.reply(`По фильтру ${formatFilterLabel(filter)} пользователей пока нет.`);
+    await ctx.reply(adminMessages.filterEmpty(filter));
     return;
   }
 
   await ctx.reply(
     [
-      `Список по фильтру: ${formatFilterLabel(filter)}`,
+      adminMessages.filterListHeader(filter),
       "",
       users
-        .map((user: { fullName: string; telegramId: string; vpnClient: { status: string } | null }) => {
+        .map((user: ImportedListUser) => {
           const status = user.vpnClient?.status.toLowerCase() ?? "no-client";
           return `${user.fullName} | tg=${user.telegramId} | ${status}`;
         })
@@ -371,6 +409,26 @@ function parseRequestId(value: string | undefined): number | null {
 
   const requestId = Number.parseInt(value, 10);
   return Number.isInteger(requestId) ? requestId : null;
+}
+
+function parseUserId(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const userId = Number.parseInt(value.trim(), 10);
+  return Number.isInteger(userId) ? userId : null;
+}
+
+async function resolveTelegramIdFromUserId(value: string | undefined): Promise<string | null> {
+  const userId = parseUserId(value);
+
+  if (userId === null) {
+    return null;
+  }
+
+  const user = await userService.findById(userId);
+  return user?.telegramId ?? null;
 }
 
 function parseBindSelection(value: string | undefined): { requestId: number; importedUserId: number } | null {
@@ -389,23 +447,24 @@ function parseBindSelection(value: string | undefined): { requestId: number; imp
   return { requestId, importedUserId };
 }
 
-async function sendRequestDetails(ctx: any, requestId: number) {
+async function sendRequestDetails(ctx: BotContext, requestId: number) {
   const request = await requestService.getRequestById(requestId);
+  const labels = adminMessages.cardLabels;
 
   if (!request) {
-    await ctx.reply("Заявка не найдена.");
+    await ctx.reply(adminMessages.requestNotFound);
     return;
   }
 
   await ctx.reply(
     [
-      `Заявка #${request.id}`,
-      `Статус: ${request.status.toLowerCase()}`,
-      `Имя: ${request.user.fullName}`,
-      `Telegram ID: ${request.user.telegramId}`,
-      `Username: ${request.user.username ?? "-"}`,
-      `Создана: ${formatDate(request.createdAt)}`,
-      `Текущий клиент: ${request.user.vpnClient ? "есть" : "нет"}`,
+      `${labels.requestNumber} #${request.id}`,
+      `${labels.status}: ${request.status.toLowerCase()}`,
+      `${labels.name}: ${request.user.fullName}`,
+      `${labels.telegramId}: ${request.user.telegramId}`,
+      `${labels.username}: ${request.user.username ?? "-"}`,
+      `${labels.created}: ${formatDate(request.createdAt)}`,
+      `${labels.currentClient}: ${request.user.vpnClient ? adminMessages.yes : adminMessages.no}`,
     ].join("\n"),
     request.status === "PENDING"
       ? { reply_markup: createRequestDecisionKeyboard(request.id) }
@@ -413,54 +472,39 @@ async function sendRequestDetails(ctx: any, requestId: number) {
   );
 }
 
-async function startAddUserFlow(ctx: any, adminIdentity: { telegramId: string }) {
-  adminStates.set(adminIdentity.telegramId, {
+async function startAddUserFlow(ctx: BotContext, adminIdentity: { telegramId: string }) {
+  const firstStep = addUserFieldOrder[0];
+
+  await adminStateService.set(adminIdentity.telegramId, {
     kind: "adduser",
-    step: "telegramId",
+    step: firstStep,
     draft: {},
   });
 
   await ctx.reply(
     [
-      "Запускаю пошаговое ручное добавление пользователя.",
-      "Отправьте `/cancel`, если захотите отменить сценарий.",
+      adminMessages.startAddUser,
+      adminMessages.cancelHint,
       "",
-      addUserPrompts.telegramId,
+      addUserPrompts[firstStep],
     ].join("\n"),
     { parse_mode: "Markdown" },
   );
 }
 
-async function startSetExpiryFlow(ctx: any, adminIdentity: { telegramId: string }) {
-  adminStates.set(adminIdentity.telegramId, {
-    kind: "setexpiry",
-    step: "telegramId",
-    draft: {},
-  });
-
-  await ctx.reply(
-    [
-      "Запускаю пошаговое изменение срока действия.",
-      "Отправьте `/cancel`, если захотите отменить сценарий.",
-      "",
-      setExpiryPrompts.telegramId,
-    ].join("\n"),
-    { parse_mode: "Markdown" },
-  );
-}
-
-async function startSetExpiryDateFlow(ctx: any, adminIdentity: { telegramId: string }, telegramId: string) {
-  adminStates.set(adminIdentity.telegramId, {
+async function startSetExpiryDateFlow(
+  ctx: BotContext,
+  adminIdentity: { telegramId: string },
+  telegramId: string,
+) {
+  await adminStateService.set(adminIdentity.telegramId, {
     kind: "setexpiry",
     step: "expiresAt",
     draft: { telegramId },
   });
 
   await ctx.reply(
-    [
-      "Введите новую дату окончания в формате YYYY-MM-DD или `none`.",
-      "Отправьте `/cancel`, если захотите отменить сценарий.",
-    ].join("\n"),
+    [adminMessages.startSetExpiryDate, adminMessages.cancelHint].join("\n"),
     { parse_mode: "Markdown" },
   );
 }
@@ -471,36 +515,36 @@ function addDays(date: Date, days: number) {
   return nextDate;
 }
 
-async function sendSetExpiryOptions(ctx: any, telegramId: string) {
-  const user = await adminService.getUserInfo(telegramId);
+async function sendSetExpiryOptions(ctx: BotContext, userId: number) {
+  const user = await userService.findById(userId);
 
   if (!user) {
-    await ctx.reply("Пользователь не найден.");
+    await ctx.reply(adminMessages.userNotFound);
     return false;
   }
 
   await ctx.reply(
-    [
-      `Выберите новый срок для ${user.fullName}.`,
-      `Текущий срок: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
-      "",
-      "Можно выбрать быстрый вариант или перейти к ручному вводу даты.",
-    ].join("\n"),
+    adminMessages.expiryOptionsTitle({
+      fullName: user.fullName,
+      current: formatDate(user.vpnClient?.expiresAt ?? null),
+    }),
     {
-      reply_markup: createExpiryOptionsKeyboard(telegramId),
+      reply_markup: createExpiryOptionsKeyboard(user.id),
     },
   );
 
   return true;
 }
 
-function formatTrafficBytes(value: number): string {
-  if (value < 1024) {
-    return `${value} B`;
+function formatTrafficBytes(value: number | bigint): string {
+  const numericValue = typeof value === "bigint" ? Number(value) : value;
+
+  if (numericValue < 1024) {
+    return `${numericValue} B`;
   }
 
-  const units = ["KB", "MB", "GB", "TB"];
-  let size = value / 1024;
+  const units = ["KB", "MB", "GB", "TB", "PB"];
+  let size = numericValue / 1024;
   let unitIndex = 0;
 
   while (size >= 1024 && unitIndex < units.length - 1) {
@@ -511,32 +555,76 @@ function formatTrafficBytes(value: number): string {
   return `${size.toFixed(size >= 100 ? 0 : size >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
-async function formatAdminUserInfoMessage(user: any) {
-  const trafficStats = user.vpnClient?.emailLabel
-    ? await xrayStatsService.getUserTraffic(user.vpnClient.emailLabel)
+function formatTimestamp(date: Date): string {
+  return date.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+}
+
+async function formatAdminUserInfoMessage(user: {
+  id: number;
+  fullName: string;
+  telegramId: string;
+  username: string | null;
+  vpnClient:
+    | {
+        status: string;
+        expiresAt: Date | null;
+        emailLabel: string;
+      }
+    | null;
+}): Promise<string> {
+  const labels = adminMessages.cardLabels;
+  const emailLabel = user.vpnClient?.emailLabel;
+  const trafficStats = emailLabel
+    ? await xrayStatsService.getUserTraffic(emailLabel)
     : null;
   const latestSnapshot = await trafficSnapshotService.getLatestSnapshot(user.id);
   const trafficDelta24h = await trafficSnapshotService.getDeltaForLastHours(user.id, 24);
+  const sharing = emailLabel
+    ? await xrayAccessLogService.getStatsForEmail(emailLabel)
+    : null;
 
-  return [
-    `Имя: ${user.fullName}`,
-    `Telegram ID: ${user.telegramId}`,
-    `Username: ${user.username ?? "-"}`,
-    `VPN статус: ${user.vpnClient?.status.toLowerCase() ?? "нет клиента"}`,
-    `Доступ до: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
-    `Трафик входящий: ${trafficStats ? formatTrafficBytes(trafficStats.downlinkBytes) : "нет данных"}`,
-    `Трафик исходящий: ${trafficStats ? formatTrafficBytes(trafficStats.uplinkBytes) : "нет данных"}`,
-    `Трафик всего: ${trafficStats ? formatTrafficBytes(trafficStats.totalBytes) : "нет данных"}`,
-    `Последний снимок: ${formatDate(latestSnapshot?.capturedAt ?? null)}`,
-    `Прирост за 24 часа: ${trafficDelta24h ? formatTrafficBytes(trafficDelta24h.totalBytes) : "нет истории"}`,
-  ].join("\n");
+  const lines = [
+    `${labels.name}: ${user.fullName}`,
+    `${labels.telegramId}: ${user.telegramId}`,
+    `${labels.username}: ${user.username ?? "-"}`,
+    `${labels.vpnStatus}: ${user.vpnClient?.status.toLowerCase() ?? adminMessages.noClient}`,
+    `${labels.accessUntil}: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
+    `${labels.trafficIn}: ${trafficStats ? formatTrafficBytes(trafficStats.downlinkBytes) : adminMessages.noTrafficData}`,
+    `${labels.trafficOut}: ${trafficStats ? formatTrafficBytes(trafficStats.uplinkBytes) : adminMessages.noTrafficData}`,
+    `${labels.trafficTotal}: ${trafficStats ? formatTrafficBytes(trafficStats.totalBytes) : adminMessages.noTrafficData}`,
+    `${labels.lastSnapshot}: ${formatDate(latestSnapshot?.capturedAt ?? null)}`,
+    `${labels.delta24h}: ${trafficDelta24h ? formatTrafficBytes(trafficDelta24h.totalBytes) : adminMessages.noTrafficHistory}`,
+  ];
+
+  if (emailLabel) {
+    if (sharing) {
+      lines.push(
+        `${labels.sharingIps} (${env.sharingDetectorWindowHours}ч): ${sharing.uniqueIps}`,
+        `${labels.sharingSubnets} (${env.sharingDetectorWindowHours}ч): ${sharing.uniqueSubnets}`,
+        `${labels.sharingLastSeen}: ${formatTimestamp(sharing.lastSeen)}`,
+      );
+
+      if (sharing.uniqueSubnets >= env.sharingIpThreshold) {
+        lines.push(labels.sharingFlag);
+      }
+    } else {
+      lines.push(`${labels.sharingIps} (${env.sharingDetectorWindowHours}ч): ${labels.sharingNoData}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
-async function applyQuickExpiry(ctx: any, admin: NonNullable<Awaited<ReturnType<typeof getAdminIdentity>>>, telegramId: string, days: number) {
+async function applyQuickExpiry(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  telegramId: string,
+  days: number,
+) {
   const user = await adminService.getUserInfo(telegramId);
 
   if (!user?.vpnClient) {
-    await ctx.reply("Пользователь или VPN-клиент не найден.");
+    await ctx.reply(adminMessages.clientOrUserNotFound);
     return;
   }
 
@@ -547,46 +635,21 @@ async function applyQuickExpiry(ctx: any, admin: NonNullable<Awaited<ReturnType<
   const client = await adminService.setExpiry(admin.adminUser.id, telegramId, expiresAt);
 
   if (!client) {
-    await ctx.reply("Пользователь или VPN-клиент не найден.");
+    await ctx.reply(adminMessages.clientOrUserNotFound);
     return;
   }
 
-  adminStates.delete(admin.identity.telegramId);
-  await ctx.reply(`Срок продлён на ${days} дней. Новый срок действия: ${formatDate(client.expiresAt)}.`);
-}
-
-async function startToggleFlow(ctx: any, adminIdentity: { telegramId: string }, kind: "disable" | "enable") {
-  adminStates.set(adminIdentity.telegramId, { kind });
-
+  await adminStateService.delete(admin.identity.telegramId);
   await ctx.reply(
-    [
-      kind === "disable"
-        ? "Запускаю пошаговое отключение пользователя."
-        : "Запускаю пошаговое включение пользователя.",
-      "Отправьте `/cancel`, если захотите отменить сценарий.",
-      "",
-      "Введите Telegram ID пользователя.",
-    ].join("\n"),
-    { parse_mode: "Markdown" },
+    adminMessages.expiryQuickApplied({
+      days,
+      newExpiry: formatDate(client.expiresAt),
+    }),
   );
 }
 
-async function startUserInfoFlow(ctx: any, adminIdentity: { telegramId: string }) {
-  adminStates.set(adminIdentity.telegramId, { kind: "userinfo" });
-
-  await ctx.reply(
-    [
-      "Запускаю просмотр карточки пользователя.",
-      "Отправьте `/cancel`, если захотите отменить сценарий.",
-      "",
-      "Введите Telegram ID пользователя.",
-    ].join("\n"),
-    { parse_mode: "Markdown" },
-  );
-}
-
-async function startBindClientFlow(ctx: any, adminIdentity: { telegramId: string }) {
-  adminStates.set(adminIdentity.telegramId, {
+async function startBindClientFlow(ctx: BotContext, adminIdentity: { telegramId: string }) {
+  await adminStateService.set(adminIdentity.telegramId, {
     kind: "bindclient",
     step: "telegramId",
     draft: {},
@@ -594,8 +657,8 @@ async function startBindClientFlow(ctx: any, adminIdentity: { telegramId: string
 
   await ctx.reply(
     [
-      "Запускаю привязку imported-клиента к реальному Telegram ID.",
-      "Отправьте `/cancel`, если захотите отменить сценарий.",
+      adminMessages.startBindClient,
+      adminMessages.cancelHint,
       "",
       bindClientPrompts.telegramId,
     ].join("\n"),
@@ -603,7 +666,25 @@ async function startBindClientFlow(ctx: any, adminIdentity: { telegramId: string
   );
 }
 
-async function handleAddUserState(ctx: any, admin: Awaited<ReturnType<typeof getAdminIdentity>>, state: AddUserState, text: string) {
+function describeBindError(reason: "target_not_found" | "target_already_has_client" | "imported_not_found"): string {
+  if (reason === "target_not_found") {
+    return adminMessages.bindTargetNotFound;
+  }
+
+  if (reason === "target_already_has_client") {
+    return adminMessages.bindTargetAlreadyHasClient;
+  }
+
+  return adminMessages.importedNotFound;
+}
+
+async function handleAddUserState(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  state: AddUserState,
+  text: string,
+): Promise<boolean> {
+  const labels = adminMessages.cardLabels;
   const parsed = parseAddUserValue(state.step, text);
 
   if (!parsed.ok) {
@@ -616,31 +697,36 @@ async function handleAddUserState(ctx: any, admin: Awaited<ReturnType<typeof get
   const nextStep = getNextAddUserField(state.step);
 
   if (!nextStep) {
-    const client = await adminService.addOrUpdateUser(admin!.adminUser.id, buildAddUserInput(state.draft));
-    adminStates.delete(admin!.identity.telegramId);
+    const client = await adminService.addOrUpdateUser(admin.adminUser.id, buildAddUserInput(state.draft));
+    await adminStateService.delete(admin.identity.telegramId);
 
     await ctx.reply(
       [
-        `Пользователь сохранён: ${client.user.fullName}`,
-        `Telegram ID: ${client.user.telegramId}`,
-        `Статус: ${client.status.toLowerCase()}`,
-        `Доступ до: ${formatDate(client.expiresAt)}`,
+        adminMessages.userSaved(client.user.fullName),
+        `${labels.telegramId}: ${client.user.telegramId}`,
+        `${labels.status}: ${client.status.toLowerCase()}`,
+        `${labels.accessUntil}: ${formatDate(client.expiresAt)}`,
       ].join("\n"),
     );
     return true;
   }
 
   state.step = nextStep;
-  adminStates.set(admin!.identity.telegramId, state);
+  await adminStateService.set(admin.identity.telegramId, state);
   await ctx.reply(addUserPrompts[nextStep], { parse_mode: "Markdown" });
   return true;
 }
 
-async function handleSetExpiryState(ctx: any, admin: Awaited<ReturnType<typeof getAdminIdentity>>, state: SetExpiryState, text: string) {
+async function handleSetExpiryState(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  state: SetExpiryState,
+  text: string,
+): Promise<boolean> {
   if (state.step === "telegramId") {
     state.draft.telegramId = text.trim();
     state.step = "expiresAt";
-    adminStates.set(admin!.identity.telegramId, state);
+    await adminStateService.set(admin.identity.telegramId, state);
     await ctx.reply(setExpiryPrompts.expiresAt, { parse_mode: "Markdown" });
     return true;
   }
@@ -652,137 +738,297 @@ async function handleSetExpiryState(ctx: any, admin: Awaited<ReturnType<typeof g
     return true;
   }
 
-  const client = await adminService.setExpiry(admin!.adminUser.id, state.draft.telegramId!, parsed.value);
-  adminStates.delete(admin!.identity.telegramId);
+  const client = await adminService.setExpiry(admin.adminUser.id, state.draft.telegramId!, parsed.value);
+  await adminStateService.delete(admin.identity.telegramId);
 
   if (!client) {
-    await ctx.reply("Пользователь или VPN-клиент не найден.");
+    await ctx.reply(adminMessages.clientOrUserNotFound);
     return true;
   }
 
-  await ctx.reply(`Новый срок действия: ${formatDate(client.expiresAt)}.`);
+  await ctx.reply(adminMessages.expiryUpdated(formatDate(client.expiresAt)));
   return true;
 }
 
-async function handleToggleState(ctx: any, admin: Awaited<ReturnType<typeof getAdminIdentity>>, state: ToggleState, text: string) {
+async function handleToggleState(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  state: ToggleState,
+  text: string,
+): Promise<boolean> {
   const telegramId = text.trim();
 
   if (!telegramId) {
-    await ctx.reply("Введите Telegram ID пользователя.");
+    await ctx.reply(adminMessages.enterTelegramId);
     return true;
   }
 
   const client = await adminService.setDisabled(
-    admin!.adminUser.id,
+    admin.adminUser.id,
     telegramId,
     state.kind === "disable",
   );
-  adminStates.delete(admin!.identity.telegramId);
+  await adminStateService.delete(admin.identity.telegramId);
 
   if (!client) {
-    await ctx.reply("Пользователь или VPN-клиент не найден.");
+    await ctx.reply(adminMessages.clientOrUserNotFound);
     return true;
   }
 
-  await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
+  await ctx.reply(adminMessages.statusUpdated(client.status.toLowerCase()));
   return true;
 }
 
-async function handleUserInfoState(ctx: any, admin: Awaited<ReturnType<typeof getAdminIdentity>>, text: string) {
+async function handleUserInfoState(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  text: string,
+): Promise<boolean> {
   const telegramId = text.trim();
 
   if (!telegramId) {
-    await ctx.reply("Введите Telegram ID пользователя.");
+    await ctx.reply(adminMessages.enterTelegramId);
     return true;
   }
 
   const user = await adminService.getUserInfo(telegramId);
-  adminStates.delete(admin!.identity.telegramId);
+  await adminStateService.delete(admin.identity.telegramId);
 
   if (!user) {
-    await ctx.reply("Пользователь не найден.");
+    await ctx.reply(adminMessages.userNotFound);
     return true;
   }
 
   await ctx.reply(await formatAdminUserInfoMessage(user));
   return true;
-
-  /*
-  await ctx.reply(
-    [
-      `Имя: ${user.fullName}`,
-      `Telegram ID: ${user.telegramId}`,
-      `Username: ${user.username ?? "-"}`,
-      `VPN статус: ${user.vpnClient?.status.toLowerCase() ?? "нет клиента"}`,
-      `Доступ до: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
-    ].join("\n"),
-  );
-  */
-  return true;
 }
 
-async function handleBindClientState(ctx: any, admin: Awaited<ReturnType<typeof getAdminIdentity>>, state: BindClientState, text: string) {
+async function handleBindClientState(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  state: BindClientState,
+  text: string,
+): Promise<boolean> {
+  const labels = adminMessages.cardLabels;
   const trimmed = text.trim();
 
   if (!trimmed) {
-    await ctx.reply("Пустое значение не подходит. Попробуйте ещё раз.");
+    await ctx.reply(adminMessages.emptyValue);
     return true;
   }
 
   if (state.step === "telegramId") {
     state.draft.telegramId = trimmed;
     state.step = "lookup";
-    adminStates.set(admin!.identity.telegramId, state);
+    await adminStateService.set(admin.identity.telegramId, state);
     await ctx.reply(bindClientPrompts.lookup, { parse_mode: "Markdown" });
     return true;
   }
 
   const result = await adminService.bindImportedClient(
-    admin!.adminUser.id,
+    admin.adminUser.id,
     state.draft.telegramId!,
     trimmed,
   );
-  adminStates.delete(admin!.identity.telegramId);
+  await adminStateService.delete(admin.identity.telegramId);
 
   if (!result.ok) {
-    const errorText =
-      result.reason === "target_not_found"
-        ? "Целевой пользователь не найден. Пусть он сначала напишет боту /start."
-        : result.reason === "target_already_has_client"
-          ? "У этого Telegram ID уже есть привязанный VPN-клиент."
-          : "Imported-клиент не найден. Используйте email label, UUID или imported:... идентификатор.";
-
-    await ctx.reply(errorText);
+    await ctx.reply(describeBindError(result.reason));
     return true;
   }
 
   await ctx.reply(
     [
-      "Клиент привязан.",
-      `Пользователь: ${result.client.user.fullName}`,
-      `Telegram ID: ${result.client.user.telegramId}`,
-      `Email label: ${result.client.emailLabel}`,
-      `UUID: ${result.client.uuid}`,
+      adminMessages.bindClientDone,
+      `${labels.name}: ${result.client.user.fullName}`,
+      `${labels.telegramId}: ${result.client.user.telegramId}`,
+      `${labels.emailLabel}: ${result.client.emailLabel}`,
+      `${labels.uuid}: ${result.client.uuid}`,
     ].join("\n"),
   );
 
-  await ctx.api.sendMessage(
-    result.client.user.telegramId,
-    "Доступ привязан к вашему Telegram-аккаунту. Откройте /start и получите свой конфиг.",
-    { reply_markup: createMainMenuKeyboard() },
-  );
+  await ctx.api.sendMessage(result.client.user.telegramId, adminMessages.bindUserNotice, {
+    reply_markup: createMainMenuKeyboard(),
+  });
 
   return true;
 }
 
-async function handleAdminFlowMessage(ctx: any) {
+function parseGenerateExpiry(
+  value: string,
+): { ok: true; value: Date | null } | { ok: false; error: string } {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return { ok: false, error: adminMessages.emptyValue };
+  }
+
+  const lower = trimmed.toLowerCase();
+
+  if (lower === "none" || lower === "-") {
+    return { ok: true, value: null };
+  }
+
+  if (lower === "default" || lower === "d") {
+    const days = env.vpnDefaultExpiryDays;
+    return { ok: true, value: new Date(Date.now() + days * 24 * 60 * 60 * 1000) };
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    const days = Number.parseInt(trimmed, 10);
+    if (days <= 0 || days > 36500) {
+      return { ok: false, error: adminMessages.invalidDate };
+    }
+    return { ok: true, value: new Date(Date.now() + days * 24 * 60 * 60 * 1000) };
+  }
+
+  return parseExpiryValue(trimmed);
+}
+
+async function startGenerateUserFlow(ctx: BotContext, adminIdentity: { telegramId: string }) {
+  const firstStep = generateUserFieldOrder[0];
+
+  await adminStateService.set(adminIdentity.telegramId, {
+    kind: "generateuser",
+    step: firstStep,
+    draft: {},
+  });
+
+  await ctx.reply(
+    [
+      adminMessages.startGenerateUser,
+      adminMessages.cancelHint,
+      "",
+      generateUserPrompts[firstStep],
+    ].join("\n"),
+    { parse_mode: "Markdown" },
+  );
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+async function finishGenerateUserFlow(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  draft: GenerateUserDraft,
+) {
+  const labels = adminMessages.cardLabels;
+  const fullName = draft.fullName!;
+  const telegramId =
+    draft.telegramId === AUTO_TELEGRAM_ID_MARKER || !draft.telegramId
+      ? generateManualPlaceholderTelegramId(fullName)
+      : draft.telegramId;
+  const isManual = telegramId.startsWith("manual:");
+
+  const generatedInput = vpnGeneratorService.generateForUser({
+    telegramId,
+    fullName,
+    expiresAt: draft.expiresAt ?? null,
+  });
+
+  const client = await adminService.addOrUpdateUser(admin.adminUser.id, generatedInput);
+
+  await ctx.reply(
+    [
+      adminMessages.generatedHeader,
+      `${labels.name}: ${client.user.fullName}`,
+      `${labels.telegramId}: ${client.user.telegramId}`,
+      `${labels.emailLabel}: ${client.emailLabel}`,
+      `${labels.uuid}: ${client.uuid}`,
+      `${labels.accessUntil}: ${formatDate(client.expiresAt)}`,
+    ].join("\n"),
+  );
+
+  await ctx.reply(`<code>${escapeHtml(client.vlessUrl)}</code>`, {
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+  });
+
+  try {
+    const qrPng = await qrCodeService.generateConfigPng(client.vlessUrl);
+    await ctx.replyWithPhoto(new InputFile(qrPng, "vpn-config-qr.png"), {
+      caption: messages.configQrCaption,
+    });
+  } catch (error) {
+    logger.warn({ error, telegramId }, "Failed to generate config QR for admin");
+  }
+
+  if (!isManual) {
+    try {
+      await ctx.api.sendMessage(client.user.telegramId, adminMessages.generatedNotifyUser, {
+        reply_markup: createMainMenuKeyboard(),
+      });
+    } catch (error) {
+      logger.warn(
+        { error, telegramId: client.user.telegramId },
+        "Failed to notify user about generated config",
+      );
+    }
+  }
+}
+
+async function handleGenerateUserState(
+  ctx: BotContext,
+  admin: AdminIdentity,
+  state: GenerateUserState,
+  text: string,
+): Promise<boolean> {
+  if (state.step === "fullName") {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      await ctx.reply(adminMessages.emptyValue);
+      return true;
+    }
+    state.draft.fullName = trimmed;
+    state.step = "telegramId";
+    await adminStateService.set(admin.identity.telegramId, state);
+    await ctx.reply(generateUserPrompts.telegramId, { parse_mode: "Markdown" });
+    return true;
+  }
+
+  if (state.step === "telegramId") {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      await ctx.reply(adminMessages.emptyValue);
+      return true;
+    }
+    const lower = trimmed.toLowerCase();
+    state.draft.telegramId = lower === "none" || lower === "-" ? AUTO_TELEGRAM_ID_MARKER : trimmed;
+    state.step = "expiresAt";
+    await adminStateService.set(admin.identity.telegramId, state);
+    await ctx.reply(generateUserPrompts.expiresAt, { parse_mode: "Markdown" });
+    return true;
+  }
+
+  const parsed = parseGenerateExpiry(text);
+  if (!parsed.ok) {
+    await ctx.reply(parsed.error, { parse_mode: "Markdown" });
+    return true;
+  }
+
+  state.draft.expiresAt = parsed.value;
+  await adminStateService.delete(admin.identity.telegramId);
+
+  try {
+    await finishGenerateUserFlow(ctx, admin, state.draft);
+  } catch (error) {
+    logger.error({ error }, "Failed to finalize generated user");
+    await ctx.reply(messages.unknownError);
+  }
+
+  return true;
+}
+
+async function handleAdminFlowMessage(ctx: BotContext): Promise<boolean> {
   const admin = await getAdminIdentity(ctx);
 
   if (!admin) {
     return false;
   }
 
-  const state = adminStates.get(admin.identity.telegramId);
+  const state = await adminStateService.get(admin.identity.telegramId);
 
   if (!state) {
     return false;
@@ -796,15 +1042,12 @@ async function handleAdminFlowMessage(ctx: any) {
 
   if (text.startsWith("/")) {
     if (text === "/cancel") {
-      adminStates.delete(admin.identity.telegramId);
-      await ctx.reply("Сценарий отменён.");
+      await adminStateService.delete(admin.identity.telegramId);
+      await ctx.reply(adminMessages.cancelled);
       return true;
     }
 
-    await ctx.reply(
-      "Сейчас активен админский сценарий. Завершите его или отправьте `/cancel`.",
-      { parse_mode: "Markdown" },
-    );
+    await ctx.reply(adminMessages.flowInProgress, { parse_mode: "Markdown" });
     return true;
   }
 
@@ -822,6 +1065,10 @@ async function handleAdminFlowMessage(ctx: any) {
 
   if (state.kind === "bindclient") {
     return handleBindClientState(ctx, admin, state, text);
+  }
+
+  if (state.kind === "generateuser") {
+    return handleGenerateUserState(ctx, admin, state, text);
   }
 
   return handleToggleState(ctx, admin, state, text);
@@ -864,30 +1111,24 @@ export function registerAdminHandler(bot: TelegramBot) {
       return;
     }
 
+    const labels = adminMessages.cardLabels;
     const [telegramId, lookup] = parseCommandArgs(ctx.message?.text);
 
     if (telegramId && lookup) {
       const result = await adminService.bindImportedClient(admin.adminUser.id, telegramId, lookup);
 
       if (!result.ok) {
-        const errorText =
-          result.reason === "target_not_found"
-            ? "Целевой пользователь не найден. Пусть он сначала напишет боту /start."
-            : result.reason === "target_already_has_client"
-              ? "У этого Telegram ID уже есть привязанный VPN-клиент."
-              : "Imported-клиент не найден. Используйте email label, UUID или imported:... идентификатор.";
-
-        await ctx.reply(errorText);
+        await ctx.reply(describeBindError(result.reason));
         return;
       }
 
       await ctx.reply(
         [
-          "Клиент привязан.",
-          `Пользователь: ${result.client.user.fullName}`,
-          `Telegram ID: ${result.client.user.telegramId}`,
-          `Email label: ${result.client.emailLabel}`,
-          `UUID: ${result.client.uuid}`,
+          adminMessages.bindClientDone,
+          `${labels.name}: ${result.client.user.fullName}`,
+          `${labels.telegramId}: ${result.client.user.telegramId}`,
+          `${labels.emailLabel}: ${result.client.emailLabel}`,
+          `${labels.uuid}: ${result.client.uuid}`,
         ].join("\n"),
       );
       return;
@@ -923,11 +1164,11 @@ export function registerAdminHandler(bot: TelegramBot) {
       const client = await adminService.setExpiry(admin.adminUser.id, telegramId, parsed.value);
 
       if (!client) {
-        await ctx.reply("Пользователь или VPN-клиент не найден.");
+        await ctx.reply(adminMessages.clientOrUserNotFound);
         return;
       }
 
-      await ctx.reply(`Новый срок действия: ${formatDate(client.expiresAt)}.`);
+      await ctx.reply(adminMessages.expiryUpdated(formatDate(client.expiresAt)));
       return;
     }
 
@@ -952,11 +1193,11 @@ export function registerAdminHandler(bot: TelegramBot) {
       );
 
       if (!client) {
-        await ctx.reply("Пользователь или VPN-клиент не найден.");
+        await ctx.reply(adminMessages.clientOrUserNotFound);
         return;
       }
 
-      await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
+      await ctx.reply(adminMessages.statusUpdated(client.status.toLowerCase()));
       return;
     }
 
@@ -970,13 +1211,13 @@ export function registerAdminHandler(bot: TelegramBot) {
       return;
     }
 
-    if (!adminStates.has(admin.identity.telegramId)) {
-      await ctx.reply("Активного сценария сейчас нет.");
+    if (!(await adminStateService.has(admin.identity.telegramId))) {
+      await ctx.reply(adminMessages.noActiveFlow);
       return;
     }
 
-    adminStates.delete(admin.identity.telegramId);
-    await ctx.reply("Сценарий отменён.");
+    await adminStateService.delete(admin.identity.telegramId);
+    await ctx.reply(adminMessages.cancelled);
   });
 
   bot.command("listusers", async (ctx) => {
@@ -987,30 +1228,14 @@ export function registerAdminHandler(bot: TelegramBot) {
     }
 
     const [rawFilter] = parseCommandArgs(ctx.message?.text);
-    const filter = (rawFilter?.toLowerCase() as AdminUserFilter | undefined) ?? "all";
+    const filter = (rawFilter?.toLowerCase() as AdminUserFilter | undefined) ?? null;
 
-    if (["all", "active", "expired", "disabled", "pending"].includes(filter)) {
+    if (filter && ["all", "active", "expired", "disabled", "pending"].includes(filter)) {
       await sendFilteredUserList(ctx, filter);
-      return;
-      await ctx.reply("Пользователей пока нет.");
       return;
     }
 
-    const users: Array<{
-      fullName: string;
-      telegramId: string;
-      vpnClient: { status: string } | null;
-    }> = [];
     await sendUserFilterPicker(ctx, "listusers");
-    return;
-    await ctx.reply(
-      users
-        .map((user: { fullName: string; telegramId: string; vpnClient: { status: string } | null }) => {
-          const status = user.vpnClient?.status.toLowerCase() ?? "no-client";
-          return `${user.fullName} | tg=${user.telegramId} | ${status}`;
-        })
-        .join("\n"),
-    );
   });
 
   bot.command("userinfo", async (ctx) => {
@@ -1030,24 +1255,11 @@ export function registerAdminHandler(bot: TelegramBot) {
     const user = await adminService.getUserInfo(telegramId);
 
     if (!user) {
-      await ctx.reply("Пользователь не найден.");
+      await ctx.reply(adminMessages.userNotFound);
       return;
     }
 
     await ctx.reply(await formatAdminUserInfoMessage(user));
-    return;
-
-    /*
-    await ctx.reply(
-      [
-        `Имя: ${user.fullName}`,
-        `Telegram ID: ${user.telegramId}`,
-        `Username: ${user.username ?? "-"}`,
-        `VPN статус: ${user.vpnClient?.status.toLowerCase() ?? "нет клиента"}`,
-        `Доступ до: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
-      ].join("\n"),
-    );
-    */
   });
 
   bot.callbackQuery(callbacks.adminRequests, async (ctx) => {
@@ -1078,7 +1290,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("Некорректный идентификатор заявки.");
+      await ctx.reply(adminMessages.invalidRequestId);
       return;
     }
 
@@ -1090,25 +1302,26 @@ export function registerAdminHandler(bot: TelegramBot) {
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
+    const labels = adminMessages.cardLabels;
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("Некорректный идентификатор заявки.");
+      await ctx.reply(adminMessages.invalidRequestId);
       return;
     }
 
     const client = await adminService.approveRequest(admin.adminUser.id, requestId);
 
     if (!client) {
-      await ctx.reply("Заявка не найдена или уже обработана.");
+      await ctx.reply(adminMessages.requestAlreadyHandled);
       return;
     }
 
     await ctx.reply(
       [
-        "Заявка одобрена.",
-        `Пользователь: ${client.user.fullName}`,
-        `Telegram ID: ${client.user.telegramId}`,
-        `Доступ до: ${formatDate(client.expiresAt)}`,
+        adminMessages.requestApprovedHeader,
+        `${labels.name}: ${client.user.fullName}`,
+        `${labels.telegramId}: ${client.user.telegramId}`,
+        `${labels.accessUntil}: ${formatDate(client.expiresAt)}`,
       ].join("\n"),
     );
 
@@ -1124,7 +1337,7 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("Некорректный идентификатор заявки.");
+      await ctx.reply(adminMessages.invalidRequestId);
       return;
     }
 
@@ -1138,10 +1351,11 @@ export function registerAdminHandler(bot: TelegramBot) {
       if (!admin) return;
       await ctx.answerCallbackQuery();
 
+      const labels = adminMessages.cardLabels;
       const selection = parseBindSelection(ctx.match?.[1]);
 
       if (!selection) {
-        await ctx.reply("Некорректный выбор imported-клиента.");
+        await ctx.reply(adminMessages.invalidImportedSelection);
         return;
       }
 
@@ -1154,10 +1368,10 @@ export function registerAdminHandler(bot: TelegramBot) {
       if (!result.ok) {
         const errorText =
           result.reason === "request_not_found"
-            ? "Заявка не найдена или уже обработана."
+            ? adminMessages.requestAlreadyHandled
             : result.reason === "target_already_has_client"
-              ? "У автора заявки уже есть привязанный VPN-клиент."
-              : "Imported-клиент не найден.";
+              ? adminMessages.bindRequestAlreadyHasClient
+              : adminMessages.importedNotFound;
 
         await ctx.reply(errorText);
         return;
@@ -1165,19 +1379,17 @@ export function registerAdminHandler(bot: TelegramBot) {
 
       await ctx.reply(
         [
-          "Существующий клиент привязан к заявке.",
-          `Пользователь: ${result.client.user.fullName}`,
-          `Telegram ID: ${result.client.user.telegramId}`,
-          `Email label: ${result.client.emailLabel}`,
-          `UUID: ${result.client.uuid}`,
+          adminMessages.bindRequestDone,
+          `${labels.name}: ${result.client.user.fullName}`,
+          `${labels.telegramId}: ${result.client.user.telegramId}`,
+          `${labels.emailLabel}: ${result.client.emailLabel}`,
+          `${labels.uuid}: ${result.client.uuid}`,
         ].join("\n"),
       );
 
-      await ctx.api.sendMessage(
-        result.client.user.telegramId,
-        "Доступ привязан к вашему Telegram-аккаунту. Откройте /start и получите свой конфиг.",
-        { reply_markup: createMainMenuKeyboard() },
-      );
+      await ctx.api.sendMessage(result.client.user.telegramId, adminMessages.bindUserNotice, {
+        reply_markup: createMainMenuKeyboard(),
+      });
     },
   );
 
@@ -1188,21 +1400,21 @@ export function registerAdminHandler(bot: TelegramBot) {
 
     const requestId = parseRequestId(ctx.match?.[1]);
     if (!requestId) {
-      await ctx.reply("Некорректный идентификатор заявки.");
+      await ctx.reply(adminMessages.invalidRequestId);
       return;
     }
 
     const request = await adminService.rejectRequest(admin.adminUser.id, requestId);
 
     if (!request) {
-      await ctx.reply("Заявка не найдена или уже обработана.");
+      await ctx.reply(adminMessages.requestAlreadyHandled);
       return;
     }
 
-    await ctx.reply(`Заявка #${request.id} отклонена.`);
+    await ctx.reply(adminMessages.requestRejected(request.id));
 
     await ctx.api.sendMessage(request.user.telegramId, messages.requestRejected, {
-      reply_markup: createContactKeyboard(),
+      reply_markup: createMainMenuKeyboard(),
     });
   });
 
@@ -1211,6 +1423,19 @@ export function registerAdminHandler(bot: TelegramBot) {
     if (!admin) return;
     await ctx.answerCallbackQuery();
     await startAddUserFlow(ctx, admin.identity);
+  });
+
+  bot.callbackQuery(callbacks.adminGenerateUser, async (ctx) => {
+    const admin = await getAdminIdentity(ctx);
+    if (!admin) return;
+    await ctx.answerCallbackQuery();
+    await startGenerateUserFlow(ctx, admin.identity);
+  });
+
+  bot.command("generate", async (ctx) => {
+    const admin = await getAdminIdentity(ctx);
+    if (!admin) return;
+    await startGenerateUserFlow(ctx, admin.identity);
   });
 
   bot.callbackQuery(callbacks.adminSetExpiry, async (ctx) => {
@@ -1238,28 +1463,7 @@ export function registerAdminHandler(bot: TelegramBot) {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
-
-    const users: Array<{
-      fullName: string;
-      telegramId: string;
-      vpnClient: { status: string } | null;
-    }> = [];
     await sendUserFilterPicker(ctx, "listusers");
-    return;
-
-    if (users.length === 0) {
-      await ctx.reply("Пользователей пока нет.");
-      return;
-    }
-
-    await ctx.reply(
-      users
-        .map((user: { fullName: string; telegramId: string; vpnClient: { status: string } | null }) => {
-          const status = user.vpnClient?.status.toLowerCase() ?? "no-client";
-          return `${user.fullName} | tg=${user.telegramId} | ${status}`;
-        })
-        .join("\n"),
-    );
   });
 
   bot.callbackQuery(callbacks.adminUserInfo, async (ctx) => {
@@ -1269,189 +1473,195 @@ export function registerAdminHandler(bot: TelegramBot) {
     await sendUserFilterPicker(ctx, "userinfo");
   });
 
-  bot.callbackQuery(new RegExp(`^${callbacks.adminListUsersFilterPrefix}(all|active|expired|disabled|pending)$`), async (ctx) => {
+  bot.callbackQuery(
+    new RegExp(`^${callbacks.adminListUsersFilterPrefix}(all|active|expired|disabled|pending)$`),
+    async (ctx) => {
+      const admin = await getAdminIdentity(ctx);
+      if (!admin) return;
+      await ctx.answerCallbackQuery();
+
+      const filter = ctx.match?.[1] as AdminUserFilter | undefined;
+      if (!filter) {
+        await ctx.reply(adminMessages.invalidFilter);
+        return;
+      }
+
+      await sendFilteredUserList(ctx, filter);
+    },
+  );
+
+  bot.callbackQuery(
+    new RegExp(`^${callbacks.adminUserFilterPrefix}(all|active|expired|disabled)$`),
+    async (ctx) => {
+      const admin = await getAdminIdentity(ctx);
+      if (!admin) return;
+      await ctx.answerCallbackQuery();
+
+      const filter = ctx.match?.[1] as Exclude<AdminUserFilter, "pending"> | undefined;
+      if (!filter) {
+        await ctx.reply(adminMessages.invalidFilter);
+        return;
+      }
+
+      await sendUserPicker(ctx, "userinfo", filter);
+    },
+  );
+
+  bot.callbackQuery(
+    new RegExp(`^${callbacks.adminPickerNavPrefix}(userinfo|setexpiry|disable|enable):(all|active|expired|disabled):(\\d+)$`),
+    async (ctx) => {
+      const admin = await getAdminIdentity(ctx);
+      if (!admin) return;
+      await ctx.answerCallbackQuery();
+
+      const action = ctx.match?.[1] as UserPickerAction | undefined;
+      const filter = ctx.match?.[2] as Exclude<AdminUserFilter, "pending"> | undefined;
+      const page = Number.parseInt(ctx.match?.[3] ?? "0", 10);
+
+      if (!action || !filter || !Number.isInteger(page) || page < 0) {
+        await ctx.reply(adminMessages.invalidUserPick);
+        return;
+      }
+
+      await sendUserPicker(ctx, action, filter, page);
+    },
+  );
+
+  bot.callbackQuery(
+    new RegExp(`^${callbacks.adminPickerNavPrefix}noop:`),
+    async (ctx) => {
+      await ctx.answerCallbackQuery();
+    },
+  );
+
+  bot.callbackQuery(new RegExp(`^${callbacks.adminPickUserInfoPrefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const filter = ctx.match?.[1] as AdminUserFilter | undefined;
-    if (!filter) {
-      await ctx.reply("Некорректный фильтр.");
+    const userId = parseUserId(ctx.match?.[1]);
+    if (userId === null) {
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
-    await sendFilteredUserList(ctx, filter);
-  });
-
-  bot.callbackQuery(new RegExp(`^${callbacks.adminUserFilterPrefix}(all|active|expired|disabled)$`), async (ctx) => {
-    const admin = await getAdminIdentity(ctx);
-    if (!admin) return;
-    await ctx.answerCallbackQuery();
-
-    const filter = ctx.match?.[1] as Exclude<AdminUserFilter, "pending"> | undefined;
-    if (!filter) {
-      await ctx.reply("Некорректный фильтр.");
-      return;
-    }
-
-    await sendUserPicker(ctx, "userinfo", filter);
-  });
-
-  bot.callbackQuery(new RegExp(`^${callbacks.adminPickUserInfoPrefix}(.+)$`), async (ctx, next) => {
-    const admin = await getAdminIdentity(ctx);
-    if (!admin) return;
-    await ctx.answerCallbackQuery();
-
-    const telegramId = ctx.match?.[1]?.trim();
-    if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
-      return;
-    }
-
-    const user = await adminService.getUserInfo(telegramId);
+    const user = await userService.findById(userId);
     if (!user) {
-      await ctx.reply("Пользователь не найден.");
+      await ctx.reply(adminMessages.userNotFound);
       return;
     }
 
     await ctx.reply(await formatAdminUserInfoMessage(user));
   });
 
-  bot.callbackQuery(new RegExp(`^admin:unused:userinfo:(.+)$`), async (ctx) => {
+  bot.callbackQuery(new RegExp(`^${callbacks.adminPickSetExpiryPrefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const telegramId = ctx.match?.[1]?.trim();
-    if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
+    const userId = parseUserId(ctx.match?.[1]);
+    if (userId === null) {
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
-    const user = await adminService.getUserInfo(telegramId);
-    if (!user) {
-      await ctx.reply("Пользователь не найден.");
-      return;
-    }
-
-    await ctx.reply(
-      [
-        `Имя: ${user.fullName}`,
-        `Telegram ID: ${user.telegramId}`,
-        `Username: ${user.username ?? "-"}`,
-        `VPN статус: ${user.vpnClient?.status.toLowerCase() ?? "нет клиента"}`,
-        `Доступ до: ${formatDate(user.vpnClient?.expiresAt ?? null)}`,
-      ].join("\n"),
-    );
+    await sendSetExpiryOptions(ctx, userId);
   });
 
-  bot.callbackQuery(new RegExp(`^${callbacks.adminPickSetExpiryPrefix}(.+)$`), async (ctx) => {
+  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryPlus30Prefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const telegramId = ctx.match?.[1]?.trim();
+    const telegramId = await resolveTelegramIdFromUserId(ctx.match?.[1]);
     if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
-      return;
-    }
-
-    await sendSetExpiryOptions(ctx, telegramId);
-  });
-
-  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryPlus30Prefix}(.+)$`), async (ctx) => {
-    const admin = await getAdminIdentity(ctx);
-    if (!admin) return;
-    await ctx.answerCallbackQuery();
-
-    const telegramId = ctx.match?.[1]?.trim();
-    if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
     await applyQuickExpiry(ctx, admin, telegramId, 30);
   });
 
-  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryPlus60Prefix}(.+)$`), async (ctx) => {
+  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryPlus60Prefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const telegramId = ctx.match?.[1]?.trim();
+    const telegramId = await resolveTelegramIdFromUserId(ctx.match?.[1]);
     if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
     await applyQuickExpiry(ctx, admin, telegramId, 60);
   });
 
-  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryPlus90Prefix}(.+)$`), async (ctx) => {
+  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryPlus90Prefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const telegramId = ctx.match?.[1]?.trim();
+    const telegramId = await resolveTelegramIdFromUserId(ctx.match?.[1]);
     if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
     await applyQuickExpiry(ctx, admin, telegramId, 90);
   });
 
-  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryManualPrefix}(.+)$`), async (ctx) => {
+  bot.callbackQuery(new RegExp(`^${callbacks.adminSetExpiryManualPrefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const telegramId = ctx.match?.[1]?.trim();
+    const telegramId = await resolveTelegramIdFromUserId(ctx.match?.[1]);
     if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
     await startSetExpiryDateFlow(ctx, admin.identity, telegramId);
   });
 
-  bot.callbackQuery(new RegExp(`^${callbacks.adminPickDisablePrefix}(.+)$`), async (ctx) => {
+  bot.callbackQuery(new RegExp(`^${callbacks.adminPickDisablePrefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const telegramId = ctx.match?.[1]?.trim();
+    const telegramId = await resolveTelegramIdFromUserId(ctx.match?.[1]);
     if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
     const client = await adminService.setDisabled(admin.adminUser.id, telegramId, true);
     if (!client) {
-      await ctx.reply("Пользователь или VPN-клиент не найден.");
+      await ctx.reply(adminMessages.clientOrUserNotFound);
       return;
     }
 
-    await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
+    await ctx.reply(adminMessages.statusUpdated(client.status.toLowerCase()));
   });
 
-  bot.callbackQuery(new RegExp(`^${callbacks.adminPickEnablePrefix}(.+)$`), async (ctx) => {
+  bot.callbackQuery(new RegExp(`^${callbacks.adminPickEnablePrefix}(\\d+)$`), async (ctx) => {
     const admin = await getAdminIdentity(ctx);
     if (!admin) return;
     await ctx.answerCallbackQuery();
 
-    const telegramId = ctx.match?.[1]?.trim();
+    const telegramId = await resolveTelegramIdFromUserId(ctx.match?.[1]);
     if (!telegramId) {
-      await ctx.reply("Некорректный выбор пользователя.");
+      await ctx.reply(adminMessages.invalidUserPick);
       return;
     }
 
     const client = await adminService.setDisabled(admin.adminUser.id, telegramId, false);
     if (!client) {
-      await ctx.reply("Пользователь или VPN-клиент не найден.");
+      await ctx.reply(adminMessages.clientOrUserNotFound);
       return;
     }
 
-    await ctx.reply(`Статус обновлён: ${client.status.toLowerCase()}.`);
+    await ctx.reply(adminMessages.statusUpdated(client.status.toLowerCase()));
   });
 }
+

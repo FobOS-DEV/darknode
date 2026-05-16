@@ -13,9 +13,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "prisma:resolve": "prisma migrate resolve",
     "seed:test": "node scripts/seed-test-data.js",
     "import:xray": "node scripts/import-xray-clients.js",
     "reminders:send": "node dist/reminders.js",
+    "expiry:sweep": "node dist/expirySweep.js",
     "traffic:snapshot": "node dist/trafficSnapshots.js",
     "backup:sqlite": "node scripts/backup-sqlite.js",
     "restore:sqlite": "node scripts/restore-sqlite.js"

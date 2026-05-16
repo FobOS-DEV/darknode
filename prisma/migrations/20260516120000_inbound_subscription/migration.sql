@@ -90,3 +90,15 @@ CREATE INDEX "VpnClient_inboundId_idx" ON "VpnClient"("inboundId");
 
 PRAGMA foreign_keys = ON;
 PRAGMA defer_foreign_keys = OFF;
+
+-- CreateTable: InboundUser (M:N for per-inbound visibility)
+CREATE TABLE "InboundUser" (
+    "inboundId" INTEGER NOT NULL,
+    "userId"    INTEGER NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY ("inboundId", "userId"),
+    CONSTRAINT "InboundUser_inboundId_fkey" FOREIGN KEY ("inboundId") REFERENCES "Inbound" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "InboundUser_userId_fkey"    FOREIGN KEY ("userId")    REFERENCES "User"    ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "InboundUser_userId_idx" ON "InboundUser"("userId");

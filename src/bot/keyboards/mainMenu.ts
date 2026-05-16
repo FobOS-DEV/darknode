@@ -18,7 +18,7 @@ export function createContactKeyboard(): InlineKeyboard {
 
 export function createRequestAccessKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
-    .text("Подать заявку", callbacks.mainRequestAccess)
+    .text("Подать заявку (если уже оплатили)", callbacks.mainRequestAccess)
     .row()
     .url("Написать администратору", env.supportLink);
 }

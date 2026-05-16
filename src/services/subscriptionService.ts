@@ -85,10 +85,23 @@ async function loadUserInfo(userId: number, expiresAt: Date | null): Promise<Sub
   });
 
   return {
-    uploadBytes: latest?.uplinkBytes ?? 0,
-    downloadBytes: latest?.downlinkBytes ?? 0,
+    uploadBytes: latest ? Number(latest.uplinkBytes) : 0,
+    downloadBytes: latest ? Number(latest.downlinkBytes) : 0,
     expireUnix: expiresAt ? Math.floor(expiresAt.getTime() / 1000) : null,
   };
+}
+
+async function loadVisibleInbounds(userId: number) {
+  return prisma.inbound.findMany({
+    where: {
+      status: "ACTIVE",
+      OR: [
+        { visibility: { none: {} } },
+        { visibility: { some: { userId } } },
+      ],
+    },
+    orderBy: [{ priority: "asc" }, { id: "asc" }],
+  });
 }
 
 function isClientServiceable(client: VpnClientForProfile): boolean {
@@ -153,10 +166,7 @@ export const subscriptionService = {
       };
     }
 
-    const inbounds = await prisma.inbound.findMany({
-      where: { status: "ACTIVE" },
-      orderBy: [{ priority: "asc" }, { id: "asc" }],
-    });
+    const inbounds = await loadVisibleInbounds(subscription.user.id);
 
     if (inbounds.length === 0) {
       return {
@@ -210,9 +220,15 @@ export const subscriptionService = {
     });
   },
 
-  async listActiveInboundsForDisplay() {
+  async listVisibleInboundsForUser(userId: number) {
     return prisma.inbound.findMany({
-      where: { status: "ACTIVE" },
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { visibility: { none: {} } },
+          { visibility: { some: { userId } } },
+        ],
+      },
       orderBy: [{ priority: "asc" }, { id: "asc" }],
       select: {
         id: true,

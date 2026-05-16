@@ -31,7 +31,7 @@ type SyncResult =
       results: PerInboundResult[];
     };
 
-async function listAuthorizedClients(): Promise<AuthorizedClient[]> {
+async function listAllAuthorizedClients(): Promise<AuthorizedClient[]> {
   const clients = await prisma.vpnClient.findMany({
     where: {
       status: "ACTIVE",
@@ -39,6 +39,38 @@ async function listAuthorizedClients(): Promise<AuthorizedClient[]> {
     orderBy: {
       id: "asc",
     },
+  });
+
+  return clients
+    .filter((client) => !isExpired(client.expiresAt))
+    .map((client) => ({
+      uuid: client.uuid,
+      emailLabel: client.emailLabel,
+      flow: client.flow,
+    }));
+}
+
+async function listAuthorizedClientsForInbound(
+  inboundId: number,
+  fallback: AuthorizedClient[],
+): Promise<AuthorizedClient[]> {
+  const allowedUsers = await prisma.inboundUser.findMany({
+    where: { inboundId },
+    select: { userId: true },
+  });
+
+  if (allowedUsers.length === 0) {
+    return fallback;
+  }
+
+  const allowedUserIds = new Set(allowedUsers.map((entry) => entry.userId));
+
+  const clients = await prisma.vpnClient.findMany({
+    where: {
+      status: "ACTIVE",
+      userId: { in: Array.from(allowedUserIds) },
+    },
+    orderBy: { id: "asc" },
   });
 
   return clients
@@ -78,17 +110,18 @@ export const xraySyncService = {
       return { skipped: true, reason: "no ACTIVE Inbound rows" };
     }
 
-    const clients = await listAuthorizedClients();
+    const sharedClients = await listAllAuthorizedClients();
     const results: PerInboundResult[] = [];
 
     for (const inbound of inbounds) {
       try {
+        const targetClients = await listAuthorizedClientsForInbound(inbound.id, sharedClients);
         const outcome = await xrayGrpcService.syncAuthorizedClients(
           {
             inboundTag: inbound.inboundTag,
             xrayApiAddress: inbound.xrayApiAddress,
           },
-          clients,
+          targetClients,
         );
 
         results.push({
@@ -115,7 +148,7 @@ export const xraySyncService = {
     logger.info(
       {
         inboundCount: inbounds.length,
-        clientCount: clients.length,
+        clientCount: sharedClients.length,
         failed: results.filter((result) => !result.ok).length,
       },
       "Synchronized Xray clients across inbounds",
@@ -124,7 +157,7 @@ export const xraySyncService = {
     return {
       skipped: false,
       applied: true,
-      clientCount: clients.length,
+      clientCount: sharedClients.length,
       inboundCount: inbounds.length,
       results,
     };

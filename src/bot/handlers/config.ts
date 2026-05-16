@@ -35,7 +35,7 @@ async function replyWithConfig(ctx: any) {
 
   const subscription = await subscriptionService.ensureForUser(access.client.userId);
   const subscriptionUrl = subscriptionService.buildPublicUrl(subscription.token);
-  const inbounds = await subscriptionService.listActiveInboundsForDisplay();
+  const inbounds = await subscriptionService.listVisibleInboundsForUser(access.client.userId);
 
   const inboundLines = inbounds.length
     ? inbounds
