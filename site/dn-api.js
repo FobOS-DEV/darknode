@@ -36,6 +36,17 @@
     logout:   ()                => call("POST", "/api/logout"),
     me:       ()                => call("GET",  "/api/me"),
     config:   ()                => call("GET",  "/api/config"),
+
+    admin: {
+      overview:   ()         => call("GET",  "/api/admin/overview"),
+      users:      ()         => call("GET",  "/api/admin/users"),
+      user:       (id)       => call("GET",  `/api/admin/users/${encodeURIComponent(id)}`),
+      log:        ()         => call("GET",  "/api/admin/log"),
+      extend:     (id, days) => call("POST", `/api/admin/users/${encodeURIComponent(id)}/extend`, { days }),
+      ban:        (id)       => call("POST", `/api/admin/users/${encodeURIComponent(id)}/ban`),
+      unban:      (id)       => call("POST", `/api/admin/users/${encodeURIComponent(id)}/unban`),
+      rotateUuid: (id)       => call("POST", `/api/admin/users/${encodeURIComponent(id)}/rotate-uuid`),
+    },
   };
 
   // Human-readable mapping for error codes coming back from the API.

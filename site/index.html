@@ -76,6 +76,7 @@
   <script type="text/babel" src="tweaks-panel.jsx"></script>
   <script type="text/babel" src="darknode-ui.jsx"></script>
   <script type="text/babel" src="darknode-screens.jsx"></script>
+  <script type="text/babel" src="darknode-admin.jsx"></script>
 
   <script type="text/babel">
     const { useState: useState_, useEffect: useEffect_, useMemo: useMemo_ } = React;
@@ -83,10 +84,11 @@
     const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
       "accent": "#00ff88",
       "theme": "dark",
-      "density": "regular"
+      "density": "regular",
+      "role": "client"
     }/*EDITMODE-END*/;
 
-    const SCREENS = {
+    const CLIENT_SCREENS = {
       landing:   ScreenLanding,
       register:  ScreenRegister,
       login:     ScreenLogin,
@@ -98,28 +100,46 @@
       app:       ScreenApp,
       setup:     ScreenSetup,
     };
+    const ADMIN_SCREENS = {
+      admin_home:  ScreenAdminHome,
+      admin_users: ScreenAdminUsers,
+      admin_user:  ScreenAdminUser,
+      admin_log:   ScreenAdminLog,
+    };
 
     // labels surfaced to comment system
     const SCREEN_LABELS = {
-      landing:   '01 Landing',
-      register:  '02 Register',
-      login:     '03 Login',
-      verify:    '04 Verify',
-      dashboard: '05 Dashboard',
-      vless:     '06 VLESS / QR',
-      plans:     '07 Plans',
-      os:        '08 Setup · OS',
-      app:       '09 Setup · App',
-      setup:     '10 Setup · Steps',
+      landing:     '01 Landing',
+      register:    '02 Register',
+      login:       '03 Login',
+      verify:      '04 Verify',
+      dashboard:   '05 Dashboard',
+      vless:       '06 VLESS / QR',
+      plans:       '07 Plans',
+      os:          '08 Setup · OS',
+      app:         '09 Setup · App',
+      setup:       '10 Setup · Steps',
+      admin_home:  'A1 Admin Home',
+      admin_users: 'A2 Admin Users',
+      admin_user:  'A3 Admin User',
+      admin_log:   'A4 Admin Log',
     };
 
     function DarkNodeApp() {
       const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-      const [screen, setScreen] = useState_('landing');
+      const isAdmin = t.role === 'admin';
+      const [screen, setScreen] = useState_(isAdmin ? 'admin_home' : 'landing');
       const [state, setState] = useState_({
         email: '', plan: null, loggedIn: false, os: null, app: null,
+        adminUsers: null, adminUserId: null,
       });
       const fitRef = React.useRef(null);
+
+      // when role flips, jump to a sensible home for that role
+      useEffect_(() => {
+        const valid = isAdmin ? ADMIN_SCREENS[screen] : CLIENT_SCREENS[screen];
+        if (!valid) setScreen(isAdmin ? 'admin_home' : 'landing');
+      }, [isAdmin]);
 
       // auto-scale the device frame to fit the viewport, preserving 16px gutter
       useEffect_(() => {
@@ -143,7 +163,8 @@
         setScreen(name);
       };
 
-      const Screen = SCREENS[screen] || ScreenLanding;
+      const SCREENS_FOR_ROLE = isAdmin ? ADMIN_SCREENS : CLIENT_SCREENS;
+      const Screen = SCREENS_FOR_ROLE[screen] || (isAdmin ? ScreenAdminHome : ScreenLanding);
 
       // Inject the accent into CSS var
       const cssVars = {
@@ -169,6 +190,17 @@
           </div>
 
           <TweaksPanel title="Tweaks">
+            <TweakSection label="Роль" />
+            <TweakRadio
+              label="Режим"
+              value={t.role}
+              options={[
+                { value: 'client', label: 'Client' },
+                { value: 'admin',  label: 'Admin' },
+              ]}
+              onChange={(v) => setTweak('role', v)}
+            />
+
             <TweakSection label="Тема" />
             <TweakRadio
               label="Тема"
@@ -202,10 +234,10 @@
 
             <TweakSection label="Навигация" />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-              {Object.keys(SCREENS).map((s) => (
+              {Object.keys(SCREENS_FOR_ROLE).map((s) => (
                 <TweakButton
                   key={s}
-                  label={SCREEN_LABELS[s].replace(/^\d+\s/, '')}
+                  label={SCREEN_LABELS[s].replace(/^([A-Z]?\d+)\s/, '')}
                   active={screen === s}
                   onClick={() => go(s)}
                 />

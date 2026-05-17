@@ -67,12 +67,12 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (path.startsWith("/api/")) {
-    const handler = apiRoutes.match(req);
-    if (!handler) {
+    const matched = apiRoutes.match(req);
+    if (!matched) {
       send(res, 404, JSON.stringify({ error: "not_found" }), "application/json; charset=utf-8");
       return;
     }
-    void apiRoutes.handle(handler, req, res);
+    void apiRoutes.handle(matched, req, res);
     return;
   }
 
