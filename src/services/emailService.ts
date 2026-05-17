@@ -1,3 +1,5 @@
+import { createTransport, type Transporter } from "nodemailer";
+
 import { env } from "../config/env";
 import { logger } from "../config/logger";
 
@@ -12,6 +14,49 @@ type SendResult =
   | { ok: true; provider: string; messageId?: string }
   | { ok: false; provider: string; error: string };
 
+// ─── SMTP ────────────────────────────────────────────────────────────────────
+let smtpTransporter: Transporter | null = null;
+
+function isSmtpConfigured(): boolean {
+  return Boolean(env.smtpHost && env.smtpUser && env.smtpPass && env.emailFrom);
+}
+
+function getSmtpTransporter(): Transporter {
+  if (smtpTransporter) {
+    return smtpTransporter;
+  }
+  smtpTransporter = createTransport({
+    host: env.smtpHost!,
+    port: env.smtpPort,
+    secure: env.smtpSecure,
+    auth: {
+      user: env.smtpUser!,
+      pass: env.smtpPass!,
+    },
+  });
+  return smtpTransporter;
+}
+
+async function sendViaSmtp(input: SendInput): Promise<SendResult> {
+  if (!isSmtpConfigured()) {
+    return { ok: false, provider: "smtp", error: "SMTP_HOST/USER/PASS/EMAIL_FROM not configured" };
+  }
+  try {
+    const info = await getSmtpTransporter().sendMail({
+      from: env.emailFrom!,
+      to: input.to,
+      subject: input.subject,
+      text: input.textBody,
+      html: input.htmlBody,
+    });
+    return { ok: true, provider: "smtp", messageId: info.messageId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, provider: "smtp", error: message };
+  }
+}
+
+// ─── Resend ──────────────────────────────────────────────────────────────────
 async function sendViaResend(input: SendInput): Promise<SendResult> {
   if (!env.resendApiKey || !env.emailFrom) {
     return { ok: false, provider: "resend", error: "RESEND_API_KEY / EMAIL_FROM not configured" };
@@ -48,6 +93,7 @@ async function sendViaResend(input: SendInput): Promise<SendResult> {
   }
 }
 
+// ─── Console fallback ────────────────────────────────────────────────────────
 function logToConsole(input: SendInput): SendResult {
   logger.info(
     { to: input.to, subject: input.subject, textBody: input.textBody },
@@ -56,10 +102,25 @@ function logToConsole(input: SendInput): SendResult {
   return { ok: true, provider: "console" };
 }
 
+// ─── Public API ──────────────────────────────────────────────────────────────
 export const emailService = {
   async send(input: SendInput): Promise<SendResult> {
+    // SMTP wins when explicitly configured — it's what an admin would set
+    // after consciously picking Mail.ru / Yandex / etc. Resend is the default
+    // when only an API key is around; console-log keeps dev environments happy.
+    if (isSmtpConfigured()) {
+      const result = await sendViaSmtp(input);
+      if (!result.ok) {
+        logger.warn({ provider: "smtp", error: result.error }, "SMTP send failed");
+      }
+      return result;
+    }
     if (env.resendApiKey) {
-      return sendViaResend(input);
+      const result = await sendViaResend(input);
+      if (!result.ok) {
+        logger.warn({ provider: "resend", error: result.error }, "Resend send failed");
+      }
+      return result;
     }
     return logToConsole(input);
   },
