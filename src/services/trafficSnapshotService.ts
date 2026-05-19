@@ -98,9 +98,9 @@ export const trafficSnapshotService = {
     return {
       fromCapturedAt: baseline.capturedAt,
       toCapturedAt: latest.capturedAt,
-      uplinkBytes: clampDelta(latest.uplinkBytes, baseline.uplinkBytes),
-      downlinkBytes: clampDelta(latest.downlinkBytes, baseline.downlinkBytes),
-      totalBytes: clampDelta(latest.totalBytes, baseline.totalBytes),
+      uplinkBytes: clampDelta(Number(latest.uplinkBytes), Number(baseline.uplinkBytes)),
+      downlinkBytes: clampDelta(Number(latest.downlinkBytes), Number(baseline.downlinkBytes)),
+      totalBytes: clampDelta(Number(latest.totalBytes), Number(baseline.totalBytes)),
     };
   },
 };

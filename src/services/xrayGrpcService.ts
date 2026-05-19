@@ -24,6 +24,11 @@ type AuthorizedClient = {
   flow: string;
 };
 
+export type InboundTarget = {
+  inboundTag: string;
+  xrayApiAddress?: string | null;
+};
+
 type HandlerServiceClient = grpc.Client & {
   AlterInbound(
     request: Record<string, unknown>,
@@ -82,8 +87,8 @@ function unaryCall<T>(invoke: (callback: (error: grpc.ServiceError | null, respo
   });
 }
 
-function createClient() {
-  const resolvedAddress = resolveXrayApiAddress();
+function createClient(target: InboundTarget) {
+  const resolvedAddress = resolveXrayApiAddress(target.xrayApiAddress);
 
   return new grpcPackage.xray.app.proxyman.command.HandlerService(
     resolvedAddress,
@@ -91,7 +96,11 @@ function createClient() {
   );
 }
 
-function resolveXrayApiAddress() {
+function resolveXrayApiAddress(override?: string | null) {
+  if (override && override.trim()) {
+    return override;
+  }
+
   if (env.xrayApiAddress) {
     return env.xrayApiAddress;
   }
@@ -174,14 +183,14 @@ export const xrayGrpcService = {
     return env.xrayHotSyncEnabled;
   },
 
-  async listInboundUsers() {
-    const client = createClient();
+  async listInboundUsers(target: InboundTarget) {
+    const client = createClient(target);
 
     try {
       const response = await unaryCall<{ users?: RemoteUser[] }>((callback) =>
         client.GetInboundUsers(
           {
-            tag: env.xrayInboundTag,
+            tag: target.inboundTag,
             email: "",
           },
           callback,
@@ -194,14 +203,14 @@ export const xrayGrpcService = {
     }
   },
 
-  async getInboundUserCount() {
-    const client = createClient();
+  async getInboundUserCount(target: InboundTarget) {
+    const client = createClient(target);
 
     try {
       const response = await unaryCall<{ count?: number }>((callback) =>
         client.GetInboundUsersCount(
           {
-            tag: env.xrayInboundTag,
+            tag: target.inboundTag,
             email: "",
           },
           callback,
@@ -214,14 +223,14 @@ export const xrayGrpcService = {
     }
   },
 
-  async addUser(clientInput: AuthorizedClient) {
-    const client = createClient();
+  async addUser(target: InboundTarget, clientInput: AuthorizedClient) {
+    const client = createClient(target);
 
     try {
       await unaryCall((callback) =>
         client.AlterInbound(
           {
-            tag: env.xrayInboundTag,
+            tag: target.inboundTag,
             operation: {
               type: "xray.app.proxyman.command.AddUserOperation",
               value: encodeAddUserOperation(clientInput),
@@ -235,14 +244,14 @@ export const xrayGrpcService = {
     }
   },
 
-  async removeUser(email: string) {
-    const client = createClient();
+  async removeUser(target: InboundTarget, email: string) {
+    const client = createClient(target);
 
     try {
       await unaryCall((callback) =>
         client.AlterInbound(
           {
-            tag: env.xrayInboundTag,
+            tag: target.inboundTag,
             operation: {
               type: "xray.app.proxyman.command.RemoveUserOperation",
               value: encodeRemoveUserOperation(email),
@@ -256,8 +265,8 @@ export const xrayGrpcService = {
     }
   },
 
-  async syncAuthorizedClients(clients: AuthorizedClient[]) {
-    const remoteUsers = await this.listInboundUsers();
+  async syncAuthorizedClients(target: InboundTarget, clients: AuthorizedClient[]) {
+    const remoteUsers = await this.listInboundUsers(target);
     const remoteByEmail = new Map(remoteUsers.map((user) => [user.email, user]));
     const desiredByEmail = new Map(clients.map((client) => [client.emailLabel, client]));
     const removals = new Set<string>();
@@ -284,15 +293,16 @@ export const xrayGrpcService = {
     }
 
     for (const email of removals) {
-      await this.removeUser(email);
+      await this.removeUser(target, email);
     }
 
     for (const client of additions) {
-      await this.addUser(client);
+      await this.addUser(target, client);
     }
 
     logger.info(
       {
+        inboundTag: target.inboundTag,
         remoteCount: remoteUsers.length,
         desiredCount: clients.length,
         removed: removals.size,

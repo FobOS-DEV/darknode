@@ -5,6 +5,8 @@ import { messages } from "./constants/messages";
 import { env } from "./config/env";
 import { logger } from "./config/logger";
 import { prisma } from "./db/prisma";
+import { startSubscriptionServer } from "./http/subscriptionServer";
+import { bootstrapService } from "./services/bootstrapService";
 import { xraySyncService } from "./services/xraySyncService";
 import { BotContext } from "./types/bot";
 
@@ -21,6 +23,8 @@ async function bootstrap() {
     void error.ctx.reply(messages.unknownError).catch(() => undefined);
   });
 
+  const subscriptionServer = startSubscriptionServer();
+
   const shutdown = async (signal: string) => {
     if (isShuttingDown) {
       return;
@@ -30,6 +34,7 @@ async function bootstrap() {
     logger.info({ signal }, "Stopping bot");
 
     bot.stop();
+    await new Promise<void>((resolve) => subscriptionServer.close(() => resolve()));
     await prisma.$disconnect();
   };
 
@@ -37,6 +42,14 @@ async function bootstrap() {
     process.once(signal, () => {
       void shutdown(signal);
     });
+  }
+
+  try {
+    const bootstrapResult = await bootstrapService.run();
+    logger.info(bootstrapResult, "Bootstrap migration completed");
+  } catch (error) {
+    logger.error({ error }, "Bootstrap migration failed");
+    throw error;
   }
 
   if (xraySyncService.isEnabled()) {

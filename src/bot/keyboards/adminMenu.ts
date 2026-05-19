@@ -5,6 +5,8 @@ import type { AdminUserFilter } from "../../services/adminService";
 
 type UserPickerAction = "userinfo" | "setexpiry" | "disable" | "enable";
 
+export const USER_PICKER_PAGE_SIZE = 15;
+
 function getUserPickerPrefix(action: UserPickerAction): string {
   if (action === "userinfo") {
     return callbacks.adminPickUserInfoPrefix;
@@ -35,7 +37,10 @@ export function createAdminMenuKeyboard(): InlineKeyboard {
     .text("Отключить", callbacks.adminDisable)
     .text("Включить", callbacks.adminEnable)
     .row()
-    .text("Ручное добавление", callbacks.adminAddUser);
+    .text("Инбаунды", callbacks.adminInbounds)
+    .text("Сгенерировать конфиг", callbacks.adminGenerateUser)
+    .row()
+    .text("Импорт конфига", callbacks.adminAddUser);
 }
 
 export function createPendingRequestsKeyboard(
@@ -88,22 +93,42 @@ export function createImportedClientsForRequestKeyboard(
 export function createUserPickerKeyboard(
   action: UserPickerAction,
   users: Array<{
+    id: number;
     fullName: string;
     telegramId: string;
     vpnClient: { status: string } | null;
   }>,
+  filter: AdminUserFilter,
+  page: number,
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   const prefix = getUserPickerPrefix(action);
+  const totalPages = Math.max(1, Math.ceil(users.length / USER_PICKER_PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const start = safePage * USER_PICKER_PAGE_SIZE;
+  const slice = users.slice(start, start + USER_PICKER_PAGE_SIZE);
 
-  for (const user of users.slice(0, 20)) {
+  for (const user of slice) {
     const status = user.vpnClient?.status?.toLowerCase() ?? "no-client";
     keyboard
-      .text(
-        `${user.fullName} • ${status}`,
-        `${prefix}${user.telegramId}`,
-      )
+      .text(`${user.fullName} • ${status}`, `${prefix}${user.id}`)
       .row();
+  }
+
+  if (totalPages > 1) {
+    const navPrefix = callbacks.adminPickerNavPrefix;
+
+    if (safePage > 0) {
+      keyboard.text("←", `${navPrefix}${action}:${filter}:${safePage - 1}`);
+    }
+
+    keyboard.text(`${safePage + 1}/${totalPages}`, `${navPrefix}noop:${action}:${safePage}`);
+
+    if (safePage < totalPages - 1) {
+      keyboard.text("→", `${navPrefix}${action}:${filter}:${safePage + 1}`);
+    }
+
+    keyboard.row();
   }
 
   return keyboard;
@@ -145,11 +170,11 @@ export function formatFilterLabel(filter: AdminUserFilter): string {
   return "all";
 }
 
-export function createExpiryOptionsKeyboard(telegramId: string): InlineKeyboard {
+export function createExpiryOptionsKeyboard(userId: number): InlineKeyboard {
   return new InlineKeyboard()
-    .text("+30 дней", `${callbacks.adminSetExpiryPlus30Prefix}${telegramId}`)
-    .text("+60 дней", `${callbacks.adminSetExpiryPlus60Prefix}${telegramId}`)
+    .text("+30 дней", `${callbacks.adminSetExpiryPlus30Prefix}${userId}`)
+    .text("+60 дней", `${callbacks.adminSetExpiryPlus60Prefix}${userId}`)
     .row()
-    .text("+90 дней", `${callbacks.adminSetExpiryPlus90Prefix}${telegramId}`)
-    .text("Ввести дату вручную", `${callbacks.adminSetExpiryManualPrefix}${telegramId}`);
+    .text("+90 дней", `${callbacks.adminSetExpiryPlus90Prefix}${userId}`)
+    .text("Ввести дату вручную", `${callbacks.adminSetExpiryManualPrefix}${userId}`);
 }

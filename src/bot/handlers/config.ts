@@ -3,6 +3,7 @@ import { InputFile } from "grammy";
 import { logger } from "../../config/logger";
 import { messages } from "../../constants/messages";
 import { qrCodeService } from "../../services/qrCodeService";
+import { subscriptionService } from "../../services/subscriptionService";
 import { vpnService } from "../../services/vpnService";
 import { TelegramBot } from "../../types/bot";
 import { formatDate } from "../../utils/dates";
@@ -32,12 +33,23 @@ async function replyWithConfig(ctx: any) {
     return;
   }
 
+  const subscription = await subscriptionService.ensureForUser(access.client.userId);
+  const subscriptionUrl = subscriptionService.buildPublicUrl(subscription.token);
+  const inbounds = await subscriptionService.listVisibleInboundsForUser(access.client.userId);
+
+  const inboundLines = inbounds.length
+    ? inbounds
+        .map((inbound) => `• ${escapeHtml(inbound.label)} (<code>${escapeHtml(`${inbound.host}:${inbound.port}`)}</code>)`)
+        .join("\n")
+    : `<i>${escapeHtml(messages.configNoInbounds)}</i>`;
+
   const configCard = [
     `<b>${escapeHtml(access.client.displayName)}</b>`,
     messages.configIntro,
     "",
-    `<b>Сервер:</b> <code>${escapeHtml(`${access.client.server}:${access.client.port}`)}</code>`,
     `<b>Доступ до:</b> ${escapeHtml(formatDate(access.client.expiresAt))}`,
+    `<b>Активных точек входа:</b> ${inbounds.length}`,
+    inboundLines,
   ].join("\n");
 
   await ctx.reply(configCard, {
@@ -45,19 +57,19 @@ async function replyWithConfig(ctx: any) {
     disable_web_page_preview: true,
   });
 
-  await ctx.reply(`<code>${escapeHtml(access.client.vlessUrl)}</code>`, {
+  await ctx.reply(`<code>${escapeHtml(subscriptionUrl)}</code>`, {
     parse_mode: "HTML",
     disable_web_page_preview: true,
   });
 
   try {
-    const qrPng = await qrCodeService.generateConfigPng(access.client.vlessUrl);
+    const qrPng = await qrCodeService.generateConfigPng(subscriptionUrl);
 
-    await ctx.replyWithPhoto(new InputFile(qrPng, "vpn-config-qr.png"), {
+    await ctx.replyWithPhoto(new InputFile(qrPng, "vpn-subscription-qr.png"), {
       caption: messages.configQrCaption,
     });
   } catch (error) {
-    logger.warn({ error, telegramId: identity.telegramId }, "Failed to generate config QR");
+    logger.warn({ error, telegramId: identity.telegramId }, "Failed to generate subscription QR");
   }
 }
 

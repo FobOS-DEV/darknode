@@ -15,6 +15,13 @@ export const userService = {
     });
   },
 
+  async findById(id: number) {
+    return prisma.user.findUnique({
+      where: { id },
+      include: { vpnClient: true },
+    });
+  },
+
   async upsertUser(identity: TelegramIdentity, isAdmin = false) {
     return prisma.user.upsert({
       where: { telegramId: identity.telegramId },

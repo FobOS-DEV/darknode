@@ -8,20 +8,91 @@ datasource db {
 }
 
 model User {
-  id             Int             @id @default(autoincrement())
-  telegramId     String          @unique
-  username       String?
-  firstName      String?
-  lastName       String?
-  fullName       String
-  isAdmin        Boolean         @default(false)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  vpnClient      VpnClient?
-  accessRequests AccessRequest[]
-  auditLogs      AuditLog[]      @relation("actorAuditLogs")
-  targetedBy     AuditLog[]      @relation("targetAuditLogs")
+  id              Int             @id @default(autoincrement())
+  telegramId      String          @unique
+  username        String?
+  firstName       String?
+  lastName        String?
+  fullName        String
+  isAdmin         Boolean         @default(false)
+  email           String?         @unique
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  source          String          @default("telegram")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  vpnClient       VpnClient?
+  subscription    Subscription?
+  inboundAccess   InboundUser[]
+  emailVerifications EmailVerification[]
+  sessions        Session[]
+  accessRequests  AccessRequest[]
+  auditLogs       AuditLog[]      @relation("actorAuditLogs")
+  targetedBy      AuditLog[]      @relation("targetAuditLogs")
   trafficSnapshots TrafficSnapshot[]
+}
+
+model EmailVerification {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  code        String
+  purpose     String    @default("register")
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+}
+
+model Session {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  token       String    @unique
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  lastSeenAt  DateTime?
+  userAgent   String?
+  ip          String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Inbound {
+  id              Int       @id @default(autoincrement())
+  label           String
+  inboundTag      String    @unique
+  host            String
+  port            Int
+  sni             String
+  publicKey       String
+  shortId         String
+  flow            String
+  fingerprint     String    @default("chrome")
+  network         String    @default("tcp")
+  security        String    @default("reality")
+  xrayApiAddress  String?
+  status          String    @default("ACTIVE")
+  priority        Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deprecatedAt    DateTime?
+  vpnClients      VpnClient[]
+  visibility      InboundUser[]
+
+  @@index([status, priority])
+}
+
+model InboundUser {
+  inboundId  Int
+  userId     Int
+  createdAt  DateTime @default(now())
+  inbound    Inbound  @relation(fields: [inboundId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([inboundId, userId])
+  @@index([userId])
 }
 
 model VpnClient {
@@ -41,8 +112,23 @@ model VpnClient {
   createdAt   DateTime @default(now())
   expiresAt   DateTime?
   updatedAt   DateTime @updatedAt
+  inboundId   Int?
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inbound     Inbound? @relation(fields: [inboundId], references: [id], onDelete: SetNull)
   trafficSnapshots TrafficSnapshot[]
+
+  @@index([inboundId])
+}
+
+model Subscription {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @unique
+  token          String    @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  revokedAt      DateTime?
+  lastAccessedAt DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuditLog {
@@ -69,13 +155,20 @@ model AccessRequest {
   @@index([status, createdAt])
 }
 
+model AdminState {
+  id         Int      @id @default(autoincrement())
+  telegramId String   @unique
+  payload    String
+  updatedAt  DateTime @updatedAt
+}
+
 model TrafficSnapshot {
   id            Int      @id @default(autoincrement())
   userId        Int
   vpnClientId   Int
-  uplinkBytes   Int
-  downlinkBytes Int
-  totalBytes    Int
+  uplinkBytes   BigInt
+  downlinkBytes BigInt
+  totalBytes    BigInt
   capturedAt    DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   vpnClient     VpnClient @relation(fields: [vpnClientId], references: [id], onDelete: Cascade)

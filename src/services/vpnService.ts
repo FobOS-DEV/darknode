@@ -2,6 +2,7 @@ export type VpnStatusValue = "ACTIVE" | "EXPIRED" | "DISABLED";
 
 import { prisma } from "../db/prisma";
 import { isExpired } from "../utils/dates";
+import { subscriptionService } from "./subscriptionService";
 
 export type VpnClientInput = {
   telegramId: string;
@@ -25,6 +26,7 @@ export type VpnClientInput = {
 
 type AccessClient = {
   id: number;
+  userId: number;
   displayName: string;
   emailLabel: string;
   uuid: string;
@@ -39,7 +41,7 @@ type AccessClient = {
   createdAt: Date;
   expiresAt: Date | null;
   updatedAt: Date;
-  user: { fullName: string };
+  user: { id: number; fullName: string };
 };
 
 export type UserAccessState =
@@ -74,7 +76,7 @@ export const vpnService = {
     const client: AccessClient = {
       ...user.vpnClient,
       status: user.vpnClient.status as VpnStatusValue,
-      user: { fullName: user.fullName },
+      user: { id: user.id, fullName: user.fullName },
     };
 
     if (client.status === VPN_STATUS.DISABLED) {
@@ -119,7 +121,7 @@ export const vpnService = {
 
     const status = input.expiresAt && isExpired(input.expiresAt) ? VPN_STATUS.EXPIRED : VPN_STATUS.ACTIVE;
 
-    return prisma.vpnClient.upsert({
+    const client = await prisma.vpnClient.upsert({
       where: { userId: user.id },
       update: {
         displayName: input.displayName,
@@ -154,6 +156,10 @@ export const vpnService = {
         user: true,
       },
     });
+
+    await subscriptionService.ensureForUser(user.id);
+
+    return client;
   },
 
   async setExpiry(telegramId: string, expiresAt: Date | null) {

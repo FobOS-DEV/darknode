@@ -111,6 +111,33 @@ export const env = {
   xrayContainerName: getOptionalEnv("XRAY_CONTAINER_NAME", "xray-reality"),
   xrayApiAddress: getOptionalNullableEnv("XRAY_API_ADDRESS"),
   xrayInboundTag: getOptionalEnv("XRAY_INBOUND_TAG", "vless-reality"),
+  xrayAccessLogPath: getOptionalEnv("XRAY_ACCESS_LOG_PATH", "/var/log/xray/access.log"),
+  sharingIpThreshold: getOptionalNumberEnv("SHARING_IP_THRESHOLD", 5),
+  sharingDetectorWindowHours: getOptionalNumberEnv("SHARING_DETECTOR_WINDOW_HOURS", 24),
+  subBaseUrl: getRequiredEnv("SUB_BASE_URL"),
+  subHttpHost: getOptionalEnv("SUB_HTTP_HOST", "0.0.0.0"),
+  subHttpPort: getOptionalNumberEnv("SUB_HTTP_PORT", 3001),
+  resendApiKey: getOptionalNullableEnv("RESEND_API_KEY"),
+  emailFrom: getOptionalNullableEnv("EMAIL_FROM"),
+  smtpHost: getOptionalNullableEnv("SMTP_HOST"),
+  smtpPort: getOptionalNumberEnv("SMTP_PORT", 587),
+  smtpUser: getOptionalNullableEnv("SMTP_USER"),
+  smtpPass: getOptionalNullableEnv("SMTP_PASS"),
+  smtpSecure: getOptionalBooleanEnv("SMTP_SECURE", false),
+  sessionTtlDays: getOptionalNumberEnv("SESSION_TTL_DAYS", 30),
+  verificationTtlMinutes: getOptionalNumberEnv("VERIFICATION_TTL_MINUTES", 15),
+  siteOrigin: getOptionalNullableEnv("SITE_ORIGIN"),
+  subProfileTitle: (() => {
+    const b64 = getOptionalNullableEnv("SUB_PROFILE_TITLE_BASE64");
+    if (b64) {
+      try {
+        return Buffer.from(b64, "base64").toString("utf8");
+      } catch {
+        return null;
+      }
+    }
+    return getOptionalNullableEnv("SUB_PROFILE_TITLE");
+  })(),
   timezone: getOptionalEnv("TZ", "UTC"),
   supportLink: getRequiredEnv("SUPPORT_LINK"),
 };

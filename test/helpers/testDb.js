@@ -41,6 +41,11 @@ function clearProjectModules() {
 function loadProjectModules(databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
   process.env.XRAY_SYNC_ENABLED = "false";
+  process.env.BOT_TOKEN = process.env.BOT_TOKEN ?? "test-token";
+  process.env.ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID ?? "1";
+  process.env.ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "test_admin";
+  process.env.SUPPORT_LINK = process.env.SUPPORT_LINK ?? "https://t.me/test";
+  process.env.SUB_BASE_URL = process.env.SUB_BASE_URL ?? "https://sub.test.local";
   clearProjectModules();
 
   const { prisma } = require("../../dist/db/prisma.js");
