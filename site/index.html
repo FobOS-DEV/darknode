@@ -158,10 +158,12 @@
         if (typeof window === 'undefined') return;
         const mq = window.matchMedia(MOBILE_MQ);
         const handler = (e) => setIsMobile(e.matches);
-        mq.addEventListener?.('change', handler) ?? mq.addListener(handler);
-        return () => {
-          mq.removeEventListener?.('change', handler) ?? mq.removeListener(handler);
-        };
+        if (mq.addEventListener) {
+          mq.addEventListener('change', handler);
+          return () => mq.removeEventListener('change', handler);
+        }
+        mq.addListener(handler);
+        return () => mq.removeListener(handler);
       }, []);
 
       // when role flips, jump to a sensible home for that role
