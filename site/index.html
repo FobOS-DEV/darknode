@@ -54,18 +54,6 @@
     transform-origin: center center;
     will-change: transform;
   }
-
-  /* Real phones / narrow viewports: drop the iPhone-frame design preview and
-     just render the app fullscreen. */
-  @media (max-width: 600px), (pointer: coarse) {
-    html, body { overflow: auto; height: auto; min-height: 100%; }
-    .stage { position: static; background: #050505; overflow: visible; min-height: 100vh; min-height: 100dvh; display: block; }
-    .stage::before,
-    .stage-chrome,
-    .stage-tag { display: none !important; }
-    #root { width: 100%; height: auto; min-height: 100vh; min-height: 100dvh; align-items: stretch; justify-content: stretch; }
-    .device-fit { transform: none !important; width: 100%; height: auto; }
-  }
 </style>
 </head>
 <body>
@@ -137,10 +125,6 @@
       admin_log:   'A4 Admin Log',
     };
 
-    // True on real phones / narrow viewports — we skip the design-preview
-    // iPhone frame and stage decorations to avoid the "phone-in-a-phone" look.
-    const MOBILE_MQ = '(max-width: 600px), (pointer: coarse)';
-
     function DarkNodeApp() {
       const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
       const isAdmin = t.role === 'admin';
@@ -150,21 +134,6 @@
         adminUsers: null, adminUserId: null,
       });
       const fitRef = React.useRef(null);
-      const [isMobile, setIsMobile] = useState_(
-        typeof window !== 'undefined' && window.matchMedia(MOBILE_MQ).matches,
-      );
-
-      useEffect_(() => {
-        if (typeof window === 'undefined') return;
-        const mq = window.matchMedia(MOBILE_MQ);
-        const handler = (e) => setIsMobile(e.matches);
-        if (mq.addEventListener) {
-          mq.addEventListener('change', handler);
-          return () => mq.removeEventListener('change', handler);
-        }
-        mq.addListener(handler);
-        return () => mq.removeListener(handler);
-      }, []);
 
       // when role flips, jump to a sensible home for that role
       useEffect_(() => {
@@ -173,9 +142,7 @@
       }, [isAdmin]);
 
       // auto-scale the device frame to fit the viewport, preserving 16px gutter
-      // (only relevant on desktop where we keep the IOSDevice wrapper)
       useEffect_(() => {
-        if (isMobile) return;
         const fit = () => {
           const el = fitRef.current;
           if (!el) return;
@@ -188,7 +155,7 @@
         fit();
         window.addEventListener('resize', fit);
         return () => window.removeEventListener('resize', fit);
-      }, [isMobile]);
+      }, []);
 
       const go = (name) => {
         const el = document.querySelector('.dn-scroll');
@@ -203,22 +170,6 @@
       const cssVars = {
         '--dn-accent': t.accent || '#00ff88',
       };
-
-      if (isMobile) {
-        return (
-          <div
-            className="dn-app dn-app-mobile"
-            data-theme={t.theme}
-            data-density={t.density}
-            data-screen-label={SCREEN_LABELS[screen]}
-            style={cssVars}
-          >
-            <div className="dn-scroll">
-              <Screen go={go} state={state} setState={setState} />
-            </div>
-          </div>
-        );
-      }
 
       return (
         <React.Fragment>
