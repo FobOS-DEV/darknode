@@ -110,15 +110,25 @@ export const emailService = {
     // when only an API key is around; console-log keeps dev environments happy.
     if (isSmtpConfigured()) {
       const result = await sendViaSmtp(input);
-      if (!result.ok) {
-        logger.warn({ provider: "smtp", error: result.error }, "SMTP send failed");
+      if (result.ok) {
+        logger.info(
+          { provider: "smtp", to: input.to, messageId: result.messageId, subject: input.subject },
+          "email sent",
+        );
+      } else {
+        logger.warn({ provider: "smtp", error: result.error, to: input.to }, "SMTP send failed");
       }
       return result;
     }
     if (env.resendApiKey) {
       const result = await sendViaResend(input);
-      if (!result.ok) {
-        logger.warn({ provider: "resend", error: result.error }, "Resend send failed");
+      if (result.ok) {
+        logger.info(
+          { provider: "resend", to: input.to, messageId: result.messageId, subject: input.subject },
+          "email sent",
+        );
+      } else {
+        logger.warn({ provider: "resend", error: result.error, to: input.to }, "Resend send failed");
       }
       return result;
     }
