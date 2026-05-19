@@ -1305,3 +1305,31 @@
   margin: 12px 0;
   letter-spacing: 0.04em;
 }
+
+/* Mobile mode: rendered without the IOSDevice frame, full viewport.
+   .dn-app-mobile is set by the React app when the viewport is narrow or
+   the device has a coarse pointer (i.e. an actual phone). */
+.dn-app.dn-app-mobile {
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: visible;
+  /* Respect notch / dynamic island / OS gesture bar so content isn't clipped */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.dn-app.dn-app-mobile::before {
+  position: fixed;
+}
+.dn-app.dn-app-mobile .dn-scroll {
+  position: relative;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  overflow: visible;
+}
+.dn-app.dn-app-mobile .dn-screen {
+  min-height: auto;
+  padding-bottom: 24px;
+}
