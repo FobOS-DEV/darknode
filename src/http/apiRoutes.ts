@@ -110,6 +110,53 @@ const literalHandlers: Record<string, Handler> = {
     sendJson(res, 200, { ok: true, userId: result.userId });
   },
 
+  "POST /api/resend-code": async (req, res) => {
+    const body = await readJsonBody<{ email?: string }>(req);
+    if (!body.email) {
+      sendJson(res, 400, { error: "email_required" });
+      return;
+    }
+    const result = await authService.resendCode({ email: body.email });
+    if (!result.ok) {
+      sendJson(res, 400, { error: result.error });
+      return;
+    }
+    sendJson(res, 200, { ok: true });
+  },
+
+  "POST /api/forgot-password": async (req, res) => {
+    const body = await readJsonBody<{ email?: string }>(req);
+    if (!body.email) {
+      sendJson(res, 400, { error: "email_required" });
+      return;
+    }
+    // Always returns ok — see authService.forgotPassword for the privacy
+    // reasoning.
+    await authService.forgotPassword({ email: body.email });
+    sendJson(res, 200, { ok: true });
+  },
+
+  "POST /api/reset-password": async (req, res) => {
+    const body = await readJsonBody<{ email?: string; code?: string; password?: string }>(req);
+    if (!body.email || !body.code || !body.password) {
+      sendJson(res, 400, { error: "email_code_password_required" });
+      return;
+    }
+    const result = await authService.resetPassword({
+      email: body.email,
+      code: body.code,
+      password: body.password,
+      ip: getClientIp(req),
+      userAgent: req.headers["user-agent"] ?? undefined,
+    });
+    if (!result.ok) {
+      sendJson(res, 400, { error: result.error });
+      return;
+    }
+    res.setHeader("Set-Cookie", buildSessionCookie(result.session.token, result.session.expiresAt));
+    sendJson(res, 200, { ok: true, userId: result.userId });
+  },
+
   "POST /api/logout": async (req, res) => {
     const cookies = parseCookies(req.headers.cookie);
     if (cookies.dn_session) {

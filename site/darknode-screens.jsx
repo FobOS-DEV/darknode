@@ -262,7 +262,9 @@ function ScreenLogin({ go, state, setState }) {
           <Btn onClick={submit} disabled={busy}>
             {busy ? 'ВХОД...' : 'ВОЙТИ →'}
           </Btn>
-          <button className="dn-link"><u>забыл пароль</u></button>
+          <button className="dn-link" onClick={() => { setState((s) => ({ ...s, email: email.trim() })); go('forgot'); }}>
+            <u>забыл пароль</u>
+          </button>
         </div>
       </div>
     </div>
@@ -312,13 +314,14 @@ function ScreenVerify({ go, state, setState }) {
   };
 
   const resend = async () => {
-    // Re-trigger via register endpoint — server re-issues a new code for the same email.
     if (!state.email) return;
     setApiErr('');
+    const res = await window.dnApi.resendCode(state.email);
+    if (!res.ok) {
+      setApiErr(window.DN_ERROR_LABELS[res.error] || res.error);
+      return;
+    }
     setCount(45);
-    // We don't have the password here, so server-side re-issue must be triggered via register again.
-    // For MVP, just show note that codes can be resent by repeating registration.
-    setApiErr('повторная отправка пока вручную — повтори регистрацию или войди');
   };
 
   return (
@@ -1008,8 +1011,155 @@ function TroubleRow({ code, txt }) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 11) FORGOT PASSWORD — request reset code
+// ═════════════════════════════════════════════════════════════════════════════
+function ScreenForgot({ go, state, setState }) {
+  const [email, setEmail] = useS(state.email || '');
+  const [err, setErr] = useS({});
+  const [busy, setBusy] = useS(false);
+  const [apiErr, setApiErr] = useS('');
+
+  const submit = async () => {
+    const e = {};
+    if (!email.includes('@')) e.email = 'неверный формат';
+    setErr(e);
+    setApiErr('');
+    if (Object.keys(e).length) return;
+    setBusy(true);
+    const res = await window.dnApi.forgotPassword(email.trim());
+    setBusy(false);
+    if (!res.ok) {
+      setApiErr(window.DN_ERROR_LABELS[res.error] || res.error);
+      return;
+    }
+    setState((s) => ({ ...s, email: email.trim() }));
+    go('reset');
+  };
+
+  return (
+    <div className="dn-screen">
+      <Top left={<BackBtn onClick={() => go('login')} />} right={<MenuDots />} />
+      <div className="dn-page">
+        <SectionHead num="—" label="PASSWORD.RESET" right="step 1/2" />
+        <h2 className="dn-h2">Сброс<br/>пароля.</h2>
+        <p className="dn-p">
+          Введи email от аккаунта. Если аккаунт существует и подтверждён,
+          пришлём на него шестизначный код.
+        </p>
+        <div className="dn-form">
+          <Field label="EMAIL" value={email} onChange={setEmail} type="email"
+                 placeholder="you@example.com" error={err.email} autoFocus />
+        </div>
+        {apiErr && <div className="dn-api-err">// {apiErr}</div>}
+        <div className="dn-cta">
+          <Btn onClick={submit} disabled={busy}>
+            {busy ? 'ОТПРАВКА...' : 'ПРИСЛАТЬ КОД →'}
+          </Btn>
+          <button className="dn-link" onClick={() => go('login')}>
+            <u>назад ко входу</u>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 12) RESET PASSWORD — consume code + set new password
+// ═════════════════════════════════════════════════════════════════════════════
+function ScreenReset({ go, state, setState }) {
+  const [code, setCode] = useS(['', '', '', '', '', '']);
+  const [pwd, setPwd] = useS('');
+  const [pwd2, setPwd2] = useS('');
+  const [err, setErr] = useS({});
+  const [busy, setBusy] = useS(false);
+  const [apiErr, setApiErr] = useS('');
+  const refs = useR([]);
+
+  const setDigit = (i, v) => {
+    v = v.replace(/[^0-9]/g, '').slice(0, 1);
+    setCode((c) => { const n = [...c]; n[i] = v; return n; });
+    if (v && refs.current[i + 1]) refs.current[i + 1].focus();
+  };
+  const filled = code.every(Boolean);
+
+  const submit = async () => {
+    const e = {};
+    if (!filled) e.code = 'введи код полностью';
+    if (pwd.length < 8) e.pwd = 'минимум 8 символов';
+    if (pwd !== pwd2) e.pwd2 = 'не совпадает';
+    setErr(e);
+    setApiErr('');
+    if (Object.keys(e).length) return;
+    setBusy(true);
+    const res = await window.dnApi.resetPassword(state.email, code.join(''), pwd);
+    setBusy(false);
+    if (!res.ok) {
+      setApiErr(window.DN_ERROR_LABELS[res.error] || res.error);
+      if (res.error === 'code_invalid' || res.error === 'code_expired') {
+        setCode(['', '', '', '', '', '']);
+        if (refs.current[0]) refs.current[0].focus();
+      }
+      return;
+    }
+    setState((s) => ({ ...s, loggedIn: true }));
+    go('dashboard');
+  };
+
+  return (
+    <div className="dn-screen">
+      <Top left={<BackBtn onClick={() => go('forgot')} />} right={<MenuDots />} />
+      <div className="dn-page">
+        <SectionHead num="—" label="PASSWORD.RESET" right="step 2/2" />
+        <h2 className="dn-h2">Введи код<br/>и новый пароль.</h2>
+        <p className="dn-p">
+          Шестизначный код отправили на<br/>
+          <span className="dn-hl">{state.email || 'you@example.com'}</span>.
+        </p>
+
+        <div className="dn-code">
+          {code.map((d, i) => (
+            <input
+              key={i}
+              ref={(el) => (refs.current[i] = el)}
+              className="dn-code-cell"
+              value={d}
+              onChange={(e) => setDigit(i, e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Backspace' && !d && refs.current[i - 1]) refs.current[i - 1].focus();
+              }}
+              maxLength={1}
+              size={1}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+            />
+          ))}
+        </div>
+        {err.code && <div className="dn-api-err">// {err.code}</div>}
+
+        <div className="dn-form">
+          <Field label="НОВЫЙ ПАРОЛЬ" value={pwd} onChange={setPwd}
+                 type="password" placeholder="••••••••" error={err.pwd} hint="мин. 8" />
+          <Field label="ПОВТОР" value={pwd2} onChange={setPwd2}
+                 type="password" placeholder="••••••••" error={err.pwd2} />
+        </div>
+
+        {apiErr && <div className="dn-api-err">// {apiErr}</div>}
+
+        <div className="dn-cta">
+          <Btn onClick={submit} disabled={busy}>
+            {busy ? 'СБРОС...' : 'СБРОСИТЬ ПАРОЛЬ →'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── expose ──────────────────────────────────────────────────────────────────
 Object.assign(window, {
   ScreenLanding, ScreenRegister, ScreenLogin, ScreenVerify, ScreenPlans,
   ScreenDashboard, ScreenVless, ScreenOS, ScreenApp, ScreenSetup,
+  ScreenForgot, ScreenReset,
 });

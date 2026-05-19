@@ -30,12 +30,15 @@
   }
 
   window.dnApi = {
-    register: (email, password) => call("POST", "/api/register", { email, password }),
-    verify:   (email, code)     => call("POST", "/api/verify",   { email, code }),
-    login:    (email, password) => call("POST", "/api/login",    { email, password }),
-    logout:   ()                => call("POST", "/api/logout"),
-    me:       ()                => call("GET",  "/api/me"),
-    config:   ()                => call("GET",  "/api/config"),
+    register:       (email, password)      => call("POST", "/api/register",        { email, password }),
+    verify:         (email, code)          => call("POST", "/api/verify",          { email, code }),
+    login:          (email, password)      => call("POST", "/api/login",           { email, password }),
+    logout:         ()                     => call("POST", "/api/logout"),
+    me:             ()                     => call("GET",  "/api/me"),
+    config:         ()                     => call("GET",  "/api/config"),
+    resendCode:     (email)                => call("POST", "/api/resend-code",     { email }),
+    forgotPassword: (email)                => call("POST", "/api/forgot-password", { email }),
+    resetPassword:  (email, code, password)=> call("POST", "/api/reset-password",  { email, code, password }),
 
     admin: {
       overview:   ()         => call("GET",  "/api/admin/overview"),
@@ -66,5 +69,7 @@
     network_error:               "нет связи с сервером",
     internal_error:              "что-то пошло не так, попробуй ещё раз",
     request_failed:              "запрос не прошёл",
+    email_required:              "укажи email",
+    email_code_password_required:"заполни все поля",
   };
 })();

@@ -81,6 +81,16 @@ export type LoginResult =
   | { ok: true; session: { token: string; expiresAt: Date }; userId: number }
   | { ok: false; error: AuthError };
 
+export type ResendResult =
+  | { ok: true }
+  | { ok: false; error: AuthError };
+
+export type ForgotResult = { ok: true };
+
+export type ResetResult =
+  | { ok: true; session: { token: string; expiresAt: Date }; userId: number }
+  | { ok: false; error: AuthError };
+
 async function createSession(userId: number, meta: { ip?: string; userAgent?: string }) {
   const token = generateSessionToken();
   const expiresAt = new Date(Date.now() + env.sessionTtlDays * 24 * 60 * 60 * 1000);
@@ -252,6 +262,115 @@ export const authService = {
 
   async logout(token: string): Promise<void> {
     await prisma.session.deleteMany({ where: { token } });
+  },
+
+  async resendCode(input: { email: string }): Promise<ResendResult> {
+    const email = normalizeEmail(input.email);
+    if (!isValidEmail(email)) {
+      return { ok: false, error: "invalid_email" };
+    }
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      // Privacy: never confirm whether an email is registered. The caller
+      // sees ok=true and the user just doesn't get a letter.
+      return { ok: true };
+    }
+    if (user.emailVerifiedAt) {
+      // Already verified — nothing to resend. Return ok silently rather than
+      // leak the fact that the account exists and is already activated.
+      return { ok: true };
+    }
+    const code = generateCode();
+    await prisma.emailVerification.create({
+      data: {
+        userId: user.id,
+        code,
+        purpose: "register",
+        expiresAt: new Date(Date.now() + env.verificationTtlMinutes * 60 * 1000),
+      },
+    });
+    const { subject, textBody, htmlBody } = emailService.buildVerificationEmail(code);
+    const sendResult = await emailService.send({ to: email, subject, textBody, htmlBody });
+    if (!sendResult.ok) {
+      logger.warn({ email, error: sendResult.error }, "Failed to resend verification email");
+    }
+    return { ok: true };
+  },
+
+  async forgotPassword(input: { email: string }): Promise<ForgotResult> {
+    const email = normalizeEmail(input.email);
+    // Always respond ok=true to prevent email enumeration. Only actually
+    // issue a code + send mail when the address is a real verified account.
+    if (!isValidEmail(email)) {
+      return { ok: true };
+    }
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.emailVerifiedAt) {
+      return { ok: true };
+    }
+    const code = generateCode();
+    await prisma.emailVerification.create({
+      data: {
+        userId: user.id,
+        code,
+        purpose: "reset",
+        expiresAt: new Date(Date.now() + env.verificationTtlMinutes * 60 * 1000),
+      },
+    });
+    const { subject, textBody, htmlBody } = emailService.buildPasswordResetEmail(code);
+    const sendResult = await emailService.send({ to: email, subject, textBody, htmlBody });
+    if (!sendResult.ok) {
+      logger.warn({ email, error: sendResult.error }, "Failed to send password reset email");
+    }
+    return { ok: true };
+  },
+
+  async resetPassword(input: {
+    email: string;
+    code: string;
+    password: string;
+    ip?: string;
+    userAgent?: string;
+  }): Promise<ResetResult> {
+    const email = normalizeEmail(input.email);
+    if (input.password.length < 8) {
+      return { ok: false, error: "invalid_password" };
+    }
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.emailVerifiedAt) {
+      return { ok: false, error: "user_not_found" };
+    }
+    const candidate = await prisma.emailVerification.findFirst({
+      where: {
+        userId: user.id,
+        code: input.code,
+        purpose: "reset",
+        consumedAt: null,
+      },
+      orderBy: { id: "desc" },
+    });
+    if (!candidate) {
+      return { ok: false, error: "code_invalid" };
+    }
+    if (candidate.expiresAt.getTime() < Date.now()) {
+      return { ok: false, error: "code_expired" };
+    }
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.emailVerification.update({
+        where: { id: candidate.id },
+        data: { consumedAt: now },
+      }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: hashPassword(input.password) },
+      }),
+      // Revoke all other sessions for this account — if someone else has been
+      // sitting on a stolen cookie, they get kicked out at reset.
+      prisma.session.deleteMany({ where: { userId: user.id } }),
+    ]);
+    const session = await createSession(user.id, { ip: input.ip, userAgent: input.userAgent });
+    return { ok: true, session, userId: user.id };
   },
 
   async getUserBySession(token: string) {

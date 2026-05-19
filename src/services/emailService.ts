@@ -135,6 +135,34 @@ export const emailService = {
     return logToConsole(input);
   },
 
+  buildPasswordResetEmail(code: string): { subject: string; textBody: string; htmlBody: string } {
+    const subject = `DarkNode · сброс пароля ${code}`;
+    const textBody = [
+      "Привет.",
+      "",
+      `Кто-то запросил сброс пароля для твоего аккаунта DarkNode VPN.`,
+      `Код для подтверждения: ${code}`,
+      "",
+      "Код действует 15 минут. Если ты не запрашивал сброс — просто удали это письмо, пароль никто не поменяет.",
+      "",
+      "—",
+      "DarkNode VPN",
+    ].join("\n");
+    const htmlBody = `<!doctype html>
+<html><body style="font-family: ui-monospace, monospace; background: #050505; color: #e8e8e8; padding: 24px;">
+  <div style="max-width: 520px; margin: 0 auto;">
+    <div style="font-size: 11px; color: #888; letter-spacing: 0.15em; text-transform: uppercase;">// PASSWORD.RESET</div>
+    <h2 style="color: #00ff88; margin: 12px 0 24px;">🇸🇪 DarkNode VPN</h2>
+    <p>Кто-то запросил сброс пароля для твоего аккаунта. Код для подтверждения:</p>
+    <div style="font-size: 32px; letter-spacing: 8px; color: #00ff88; margin: 16px 0; font-weight: 700;">${code}</div>
+    <p style="color: #888;">Код действует 15 минут. Если ты не запрашивал сброс — просто удали это письмо, пароль никто не поменяет.</p>
+    <hr style="border: 0; border-top: 1px dashed rgba(255,255,255,0.1); margin: 24px 0;">
+    <div style="font-size: 11px; color: #555;">— DarkNode VPN, ${new Date().getUTCFullYear()}</div>
+  </div>
+</body></html>`;
+    return { subject, textBody, htmlBody };
+  },
+
   buildVerificationEmail(code: string): { subject: string; textBody: string; htmlBody: string } {
     const subject = `DarkNode · код подтверждения ${code}`;
     const textBody = [
