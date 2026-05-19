@@ -127,13 +127,30 @@
 
     function DarkNodeApp() {
       const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-      const isAdmin = t.role === 'admin';
+      // Tweak-panel role is the desktop-preview override. In production we
+      // trust /api/me — if the cookie maps to an admin user we auto-route to
+      // the admin screens. The tweak panel isn't rendered on mobile, so this
+      // is the only way a phone admin can land on the admin section.
+      const [apiIsAdmin, setApiIsAdmin] = useState_(false);
+      const isAdmin = apiIsAdmin || t.role === 'admin';
       const [screen, setScreen] = useState_(isAdmin ? 'admin_home' : 'landing');
       const [state, setState] = useState_({
         email: '', plan: null, loggedIn: false, os: null, app: null,
         adminUsers: null, adminUserId: null,
       });
       const fitRef = React.useRef(null);
+
+      // One-shot admin detection on app mount.
+      useEffect_(() => {
+        let alive = true;
+        window.dnApi.me().then((res) => {
+          if (!alive) return;
+          if (res.ok && res.data && res.data.user && res.data.user.isAdmin) {
+            setApiIsAdmin(true);
+          }
+        });
+        return () => { alive = false; };
+      }, []);
 
       // when role flips, jump to a sensible home for that role
       useEffect_(() => {
