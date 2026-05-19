@@ -14,6 +14,9 @@
 	handle {
 		root * /srv/site
 		try_files {path} {path}/ /index.html
+		# Static site changes frequently during dev — keep browsers from
+		# pinning a stale HTML/CSS/JS forever (Samsung Internet was guilty).
+		header Cache-Control "no-cache, must-revalidate"
 		file_server
 	}
 
