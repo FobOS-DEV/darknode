@@ -1305,3 +1305,78 @@
   margin: 12px 0;
   letter-spacing: 0.04em;
 }
+
+/* ── Mobile / coarse-pointer adaptation ───────────────────────────────────────
+   The IOSDevice frame + stage decorations are a designer's canvas — they look
+   intentional on desktop where you preview the app, but they paint a literal
+   "phone inside a phone" on a real handset. Reset the layout via CSS only
+   (no React changes) so the same DOM degrades to a clean fullscreen render
+   on narrow viewports and touch devices.
+   --------------------------------------------------------------------------*/
+@media (max-width: 700px), (pointer: coarse) {
+  html, body { overflow: auto !important; height: auto !important; }
+
+  /* drop the desktop decorations */
+  .stage::before,
+  .stage-chrome,
+  .stage-tag { display: none !important; }
+  .stage {
+    position: static !important;
+    overflow: visible !important;
+    background: #050505 !important;
+    min-height: 100vh; min-height: 100dvh;
+    display: block !important;
+  }
+  #root {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100vh; min-height: 100dvh;
+    display: block !important;
+  }
+
+  /* kill the scale transform and let the device wrapper flow */
+  .device-fit {
+    transform: none !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* IOSDevice outer (no class — target by parent path) */
+  .device-fit > div {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100vh; min-height: 100dvh;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    background: #050505 !important;
+  }
+
+  /* IOSDevice owns four positioned children: dynamic island, status bar wrap,
+     content wrap, home indicator. Keep only the content wrap; drop the rest. */
+  .device-fit > div > div:nth-child(1),
+  .device-fit > div > div:nth-child(2),
+  .device-fit > div > div:nth-child(4) { display: none !important; }
+  .device-fit > div > div:nth-child(3) {
+    height: auto !important;
+    display: block !important;
+  }
+  .device-fit > div > div:nth-child(3) > div {
+    flex: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* App container itself — flow naturally instead of absolute scroll-inside-frame */
+  .dn-app {
+    height: auto !important;
+    min-height: 100vh; min-height: 100dvh;
+    overflow: visible !important;
+  }
+  .dn-scroll {
+    position: relative !important;
+    top: 0 !important;
+    bottom: auto !important;
+    overflow: visible !important;
+  }
+}
