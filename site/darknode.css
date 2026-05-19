@@ -1367,11 +1367,17 @@
     overflow: visible !important;
   }
 
-  /* App container itself — flow naturally instead of absolute scroll-inside-frame */
+  /* App container itself — flow naturally instead of absolute scroll-inside-frame.
+     env() returns 0 on devices without notch/dynamic-island/home-indicator,
+     so this is a no-op everywhere it isn't needed. */
   .dn-app {
     height: auto !important;
     min-height: 100vh; min-height: 100dvh;
     overflow: visible !important;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
   .dn-scroll {
     position: relative !important;
